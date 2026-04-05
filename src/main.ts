@@ -63,15 +63,8 @@ const app = Command.make('effect-autoagent').pipe(
 // Shared layer helpers
 // =============================================================================
 
-const makeExecutorLayer = (
-	provider: 'openai' | 'anthropic',
-	model: string,
-	maxTurns: number
-) => {
-	const providerLayer =
-		provider === 'openai' ? openAiModel(model) : anthropicModel(model);
-
-	const configLayer = Layer.succeed(
+const makeConfigLayer = (model: string, maxTurns: number) =>
+	Layer.succeed(
 		AgentConfigService.Service,
 		AgentConfigService.Service.of({
 			name: 'effect-autoagent',
@@ -83,12 +76,49 @@ const makeExecutorLayer = (
 		})
 	);
 
+const makeProviderLayer = (provider: 'openai' | 'anthropic', model: string) =>
+	provider === 'openai' ? openAiModel(model) : anthropicModel(model);
+
+/**
+ * Build an executor layer backed by a Docker container.
+ * Used by the `run` subcommand for ad-hoc task execution.
+ */
+const makeDockerExecutorLayer = (
+	provider: 'openai' | 'anthropic',
+	model: string,
+	maxTurns: number
+) => {
+	const containerLayer = ContainerManager.layer.pipe(
+		Layer.provide(BunServices.layer)
+	);
+	const envLayer = Environment.docker().pipe(
+		Layer.provide(containerLayer),
+		Layer.provide(BunServices.layer)
+	);
+
+	return AgentExecutor.layer.pipe(
+		Layer.provide(makeProviderLayer(provider, model)),
+		Layer.provide(envLayer),
+		Layer.provide(makeConfigLayer(model, maxTurns))
+	);
+};
+
+/**
+ * Build an executor layer backed by local shell execution.
+ * Used by the `bench` subcommand where Docker is managed externally
+ * per-task by `BenchmarkRunner`.
+ */
+const makeLocalExecutorLayer = (
+	provider: 'openai' | 'anthropic',
+	model: string,
+	maxTurns: number
+) => {
 	const envLayer = Environment.local.pipe(Layer.provide(BunServices.layer));
 
 	return AgentExecutor.layer.pipe(
-		Layer.provide(providerLayer),
+		Layer.provide(makeProviderLayer(provider, model)),
 		Layer.provide(envLayer),
-		Layer.provide(configLayer)
+		Layer.provide(makeConfigLayer(model, maxTurns))
 	);
 };
 
@@ -135,9 +165,17 @@ const run = Command.make(
 				})
 		});
 
-		const executorLayer = makeExecutorLayer(provider, model, maxTurns);
+		const executorLayer = makeDockerExecutorLayer(
+			provider,
+			model,
+			maxTurns
+		);
 
-		yield* Console.log(`Running agent with ${provider}/${model}...`);
+		yield* fs.makeDirectory(outputDir, { recursive: true });
+
+		yield* Console.log(
+			`Running agent with ${provider}/${model} (Docker)...`
+		);
 
 		const result = yield* Effect.gen(function* () {
 			const executor = yield* AgentExecutor.Service;
@@ -199,7 +237,7 @@ const bench = Command.make(
 		const fs = yield* FileSystem.FileSystem;
 
 		// Build benchmark layer stack
-		const executorLayer = makeExecutorLayer(provider, model, maxTurns);
+		const executorLayer = makeLocalExecutorLayer(provider, model, maxTurns);
 		const containerLayer = ContainerManager.layer.pipe(
 			Layer.provide(BunServices.layer)
 		);

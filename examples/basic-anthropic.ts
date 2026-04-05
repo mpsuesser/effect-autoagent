@@ -14,6 +14,7 @@ import * as Option from 'effect/Option';
 
 import {
 	AgentExecutor,
+	ContainerManager,
 	Environment,
 	anthropicModel,
 	formatSummary
@@ -36,7 +37,13 @@ const program = Effect.gen(function* () {
 	});
 });
 
-const EnvLayer = Environment.local.pipe(Layer.provide(BunServices.layer));
+const ContainerLayer = ContainerManager.layer.pipe(
+	Layer.provide(BunServices.layer)
+);
+const EnvLayer = Environment.docker().pipe(
+	Layer.provide(ContainerLayer),
+	Layer.provide(BunServices.layer)
+);
 const ModelLayer = anthropicModel('claude-sonnet-4-20250514');
 const ExecutorLayer = AgentExecutor.layer.pipe(
 	Layer.provide(ModelLayer),

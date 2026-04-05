@@ -134,10 +134,10 @@ MetaAgent (optimizer loop)
 Both OpenAI and Anthropic are supported as fully-wired `LanguageModel` layers:
 
 ```ts
-import { openAiModel, anthropicModel } from "effect-autoagent"
+import { openAiModel, anthropicModel } from 'effect-autoagent';
 
-openAiModel("gpt-5")                    // Layer<LanguageModel>
-anthropicModel("claude-sonnet-4-20250514")  // Layer<LanguageModel>
+openAiModel('gpt-5'); // Layer<LanguageModel>
+anthropicModel('claude-sonnet-4-20250514'); // Layer<LanguageModel>
 ```
 
 API keys are read from config (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
@@ -148,29 +148,40 @@ effect-autoagent exports all domain schemas, services, and provider layers as a
 library. Compose them with standard Effect `Layer` wiring:
 
 ```ts
-import { BunRuntime, BunServices } from "@effect/platform-bun"
-import { Console, Effect, Layer } from "effect"
-import { AgentExecutor, Environment, openAiModel } from "effect-autoagent"
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Console, Effect, Layer } from 'effect';
+import {
+	AgentExecutor,
+	ContainerManager,
+	Environment,
+	openAiModel
+} from 'effect-autoagent';
 
-const task = "Create hello.txt containing 'Hello!'"
+const task = "Create hello.txt containing 'Hello!'";
 
 const program = Effect.gen(function* () {
-  const executor = yield* AgentExecutor.Service
-  const result = yield* executor.runTask(task)
-  yield* Console.log(`Exit: ${result.exitReason}`)
-})
+	const executor = yield* AgentExecutor.Service;
+	const result = yield* executor.runTask(task);
+	yield* Console.log(`Exit: ${result.exitReason}`);
+});
 
-const EnvLayer = Environment.local.pipe(Layer.provide(BunServices.layer))
+const ContainerLayer = ContainerManager.layer.pipe(
+	Layer.provide(BunServices.layer)
+);
+const EnvLayer = Environment.docker().pipe(
+	Layer.provide(ContainerLayer),
+	Layer.provide(BunServices.layer)
+);
 const ExecutorLayer = AgentExecutor.layer.pipe(
-  Layer.provide(openAiModel("gpt-4o")),
-  Layer.provide(EnvLayer)
-)
+	Layer.provide(openAiModel('gpt-4o')),
+	Layer.provide(EnvLayer)
+);
 
 program.pipe(
-  Effect.provide(ExecutorLayer),
-  Effect.provide(BunServices.layer),
-  BunRuntime.runMain
-)
+	Effect.provide(ExecutorLayer),
+	Effect.provide(BunServices.layer),
+	BunRuntime.runMain
+);
 ```
 
 ## Task format

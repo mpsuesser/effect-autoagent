@@ -8,11 +8,12 @@
  *
  * @since 0.1.0
  */
-import { Effect, FileSystem, Layer, ServiceMap } from 'effect';
+import { Clock, Effect, FileSystem, Layer, ServiceMap } from 'effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
+import { ContainerManager } from './ContainerManager.js';
 import { EnvironmentError } from './Errors.js';
 import { ExecResult } from './ExecResult.js';
 
@@ -172,6 +173,150 @@ export namespace Environment {
 			return Service.of({ exec, uploadFile, mkdir });
 		})
 	);
+
+	/**
+	 * Docker-backed environment that runs commands inside an ephemeral
+	 * container. The container is created on layer construction and
+	 * removed on teardown via `Effect.acquireRelease`.
+	 *
+	 * @since 0.3.0
+	 */
+	export const docker = (
+		image: string = 'debian:bookworm-slim'
+	): Layer.Layer<
+		Service,
+		EnvironmentError,
+		ContainerManager.Service | ChildProcessSpawner.ChildProcessSpawner
+	> =>
+		Layer.effect(
+			Service,
+			Effect.gen(function* () {
+				const container = yield* ContainerManager.Service;
+				const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+				const ts = yield* Clock.currentTimeMillis;
+
+				// Start container; remove on scope close
+				const containerId = yield* Effect.acquireRelease(
+					Effect.gen(function* () {
+						const id = `ea-run-${ts}`;
+						yield* spawner
+							.string(
+								ChildProcess.make(
+									'docker',
+									[
+										'run',
+										'-d',
+										'--name',
+										id,
+										image,
+										'sleep',
+										'infinity'
+									],
+									{ stdin: 'ignore' }
+								)
+							)
+							.pipe(
+								Effect.mapError(
+									(cause) =>
+										new EnvironmentError({
+											operation: 'docker.run',
+											message: `Failed to start container ${id}`,
+											cause
+										})
+								)
+							);
+						return id;
+					}),
+					(id) =>
+						container
+							.removeContainer(id)
+							.pipe(
+								Effect.catchTag(
+									'ContainerError',
+									() => Effect.void
+								)
+							)
+				);
+
+				const exec = Effect.fn('Environment.exec')(function* (options: {
+					readonly command: string;
+					readonly timeoutSec?: number;
+					readonly env?: Readonly<Record<string, string>>;
+				}) {
+					const execOpts: {
+						readonly containerId: string;
+						readonly command: string;
+						readonly timeoutSec?: number;
+						readonly env?: Readonly<Record<string, string>>;
+					} = {
+						containerId,
+						command: options.command,
+						...(options.timeoutSec !== undefined
+							? { timeoutSec: options.timeoutSec }
+							: {}),
+						...(options.env !== undefined
+							? { env: options.env }
+							: {})
+					};
+					return yield* container.execInContainer(execOpts).pipe(
+						Effect.mapError(
+							(cause) =>
+								new EnvironmentError({
+									operation: 'exec',
+									message: `Command failed: ${options.command}`,
+									cause
+								})
+						)
+					);
+				});
+
+				const uploadFile = Effect.fn('Environment.uploadFile')(
+					function* (options: {
+						readonly content: string;
+						readonly targetPath: string;
+					}) {
+						yield* container
+							.copyToContainer({
+								containerId,
+								content: options.content,
+								targetPath: options.targetPath
+							})
+							.pipe(
+								Effect.mapError(
+									(cause) =>
+										new EnvironmentError({
+											operation: 'uploadFile',
+											message: `Upload failed: ${options.targetPath}`,
+											cause
+										})
+								)
+							);
+					}
+				);
+
+				const mkdir = Effect.fn('Environment.mkdir')(function* (
+					path: string
+				) {
+					yield* container
+						.execInContainer({
+							containerId,
+							command: `mkdir -p ${path}`
+						})
+						.pipe(
+							Effect.mapError(
+								(cause) =>
+									new EnvironmentError({
+										operation: 'mkdir',
+										message: `mkdir failed: ${path}`,
+										cause
+									})
+							)
+						);
+				});
+
+				return Service.of({ exec, uploadFile, mkdir });
+			})
+		);
 }
 
 // =============================================================================

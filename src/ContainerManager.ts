@@ -209,16 +209,23 @@ export namespace ContainerManager {
 				readonly content: string;
 				readonly targetPath: string;
 			}) {
+				// Base64-encode to avoid shell-quoting issues, then decode
+				// inside the container. This avoids stdin piping (which hangs
+				// when spawner.string is used because nothing writes to stdin).
+				const encoded = Buffer.from(options.content).toString('base64');
 				yield* spawner
 					.string(
-						ChildProcess.make('docker', [
-							'exec',
-							'-i',
-							options.containerId,
-							'sh',
-							'-c',
-							`cat > ${options.targetPath}`
-						])
+						ChildProcess.make(
+							'docker',
+							[
+								'exec',
+								options.containerId,
+								'sh',
+								'-c',
+								`echo '${encoded}' | base64 -d > ${options.targetPath}`
+							],
+							{ stdin: 'ignore' }
+						)
 					)
 					.pipe(Effect.mapError(wrapError('copyToContainer')));
 			});

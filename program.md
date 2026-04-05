@@ -19,6 +19,19 @@ Evaluation is done by task-specific verifiers.
 Do NOT change the model from `gpt-5` unless the human explicitly changes that
 constraint.
 
+## Effect v4 Source Reference
+
+This project uses Effect v4. The complete Effect v4 source — including the
+core `effect` package, `@effect/ai-*` providers, platform packages, and all
+documentation — is vendored locally at `.references/effect-v4/`. It is pinned
+to the exact version this project depends on.
+
+**Before writing or modifying any Effect code, read the relevant source in
+`.references/effect-v4/`.** Effect v4 is new and substantially different from
+v3. Do not rely on training data or memorized APIs — they are likely stale.
+The vendored source is the single highest-quality source of truth for all
+Effect APIs, patterns, and idioms. Use it.
+
 ## Setup
 
 Before starting a new experiment:
@@ -226,6 +239,8 @@ If the answer is no, it is probably overfitting.
 - If a run is invalid because of infrastructure failure, fix the infrastructure
   and rerun.
 - The harness is TypeScript/Effect. Changes must pass `bun run check`.
+- When in doubt about any Effect API, read `.references/effect-v4/` first.
+  Do not guess.
 
 ## NEVER STOP
 

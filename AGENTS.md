@@ -4,6 +4,20 @@ Meta-agent framework that autonomously iterates on an AI agent harness by
 modifying prompts, tools, and orchestration, then hill-climbing on benchmark
 scores. Built entirely with Effect v4.
 
+## Effect v4 Source Reference
+
+The complete Effect v4 source is vendored at `.references/effect-v4/`, pinned
+to the exact version this project depends on (`effect@4.0.0-beta.43`). This
+includes the core `effect` package, all `@effect/ai-*` provider packages,
+platform packages, documentation, and migration guides.
+
+**This is the authoritative source of truth for all Effect APIs.** Effect v4 is
+new and significantly different from v3. Do not rely on memorized or cached
+knowledge of Effect APIs — it is likely wrong. Before writing any new Effect
+code, consult `.references/effect-v4/` directly. Read it, browse it, search
+it — whatever you need to do to verify the API you are about to use actually
+exists and works the way you think it does.
+
 ## Build / Lint / Test Commands
 
 ```sh

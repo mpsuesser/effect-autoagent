@@ -1,0 +1,1 @@
+Create a directory at `/root/output/` and place exactly 3 files in it, each with a `.txt` extension. The files can contain anything, but there must be exactly 3 of them and no other files in the directory.

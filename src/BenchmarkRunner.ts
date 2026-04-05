@@ -273,29 +273,58 @@ export namespace BenchmarkRunner {
 					Effect.mapError(wrapError('runAgent'))
 				);
 
-				// 4. Run verifier in the SAME container
-				const verifierOutput: string =
-					Arr.length(taskSpec.testScripts) > 0
-						? yield* container
-								.execInContainer({
-									containerId,
-									command:
-										'chmod +x /tests/test.sh && /tests/test.sh',
-									timeoutSec:
-										taskSpec.config.verifier.timeout_sec
-								})
-								.pipe(
-									Effect.map((result) =>
-										Option.getOrElse(
-											result.stdout,
-											() => ''
-										)
-									),
-									Effect.catchTag('ContainerError', () =>
-										Effect.succeed('(verifier failed)')
-									)
+				// 4. Copy test scripts into the container, then run verifier
+				const hasTests = Arr.length(taskSpec.testScripts) > 0;
+				if (hasTests) {
+					yield* container
+						.execInContainer({
+							containerId,
+							command: 'mkdir -p /tests /logs/verifier'
+						})
+						.pipe(
+							Effect.catchTag('ContainerError', () => Effect.void)
+						);
+
+					yield* Effect.forEach(
+						taskSpec.testScripts,
+						(script) =>
+							fileSystem
+								.readFileString(
+									`${taskSpec.taskDir}/tests/${script}`
 								)
-						: '';
+								.pipe(
+									Effect.flatMap((content) =>
+										container.copyToContainer({
+											containerId,
+											content,
+											targetPath: `/tests/${script}`
+										})
+									),
+									Effect.mapError(
+										wrapError('copyTestScripts')
+									)
+								),
+						{ concurrency: 4 }
+					);
+				}
+
+				const verifierOutput: string = hasTests
+					? yield* container
+							.execInContainer({
+								containerId,
+								command:
+									'chmod +x /tests/test.sh && /tests/test.sh',
+								timeoutSec: taskSpec.config.verifier.timeout_sec
+							})
+							.pipe(
+								Effect.map((result) =>
+									Option.getOrElse(result.stdout, () => '')
+								),
+								Effect.catchTag('ContainerError', () =>
+									Effect.succeed('(verifier failed)')
+								)
+							)
+					: '';
 
 				// 5. Parse score from verifier output in the same container
 				const scoreOutput = yield* container

@@ -104,21 +104,27 @@ const makeDockerExecutorLayer = (
 };
 
 /**
- * Build an executor layer backed by local shell execution.
- * Used by the `bench` subcommand where Docker is managed externally
- * per-task by `BenchmarkRunner`.
+ * Build the benchmark runner layer stack.
+ *
+ * Unlike `makeDockerExecutorLayer`, the bench flow does NOT pre-wire
+ * an `AgentExecutor` — `BenchmarkRunner` creates a per-task executor
+ * with a Docker environment targeting the task's container so the
+ * agent and verifier share the same filesystem.
  */
-const makeLocalExecutorLayer = (
+const makeBenchLayer = (
 	provider: 'openai' | 'anthropic',
 	model: string,
 	maxTurns: number
 ) => {
-	const envLayer = Environment.local.pipe(Layer.provide(BunServices.layer));
+	const containerLayer = ContainerManager.layer.pipe(
+		Layer.provide(BunServices.layer)
+	);
 
-	return AgentExecutor.layer.pipe(
+	return BenchmarkRunner.layer.pipe(
 		Layer.provide(makeProviderLayer(provider, model)),
-		Layer.provide(envLayer),
-		Layer.provide(makeConfigLayer(model, maxTurns))
+		Layer.provide(containerLayer),
+		Layer.provide(makeConfigLayer(model, maxTurns)),
+		Layer.provide(BunServices.layer)
 	);
 };
 
@@ -236,17 +242,10 @@ const bench = Command.make(
 		const { provider, model } = yield* app;
 		const fs = yield* FileSystem.FileSystem;
 
-		// Build benchmark layer stack
-		const executorLayer = makeLocalExecutorLayer(provider, model, maxTurns);
-		const containerLayer = ContainerManager.layer.pipe(
-			Layer.provide(BunServices.layer)
-		);
+		// Build benchmark layer stack — BenchmarkRunner manages per-task
+		// Docker containers and constructs AgentExecutor per task
 		const benchLayer = Layer.mergeAll(
-			BenchmarkRunner.layer.pipe(
-				Layer.provide(executorLayer),
-				Layer.provide(containerLayer),
-				Layer.provide(BunServices.layer)
-			),
+			makeBenchLayer(provider, model, maxTurns),
 			BunServices.layer
 		);
 

@@ -2,8 +2,13 @@
  * Native benchmark runner service.
  *
  * Replaces the Harbor CLI wrapper with an Effect-native implementation
- * that reads task directories, builds containers, runs agents host-side,
- * executes verifiers, and collects scores.
+ * that reads task directories, builds containers, runs agents inside
+ * those containers, executes verifiers in the same container, and
+ * collects scores.
+ *
+ * Each task gets its own ephemeral Docker container built from the
+ * task's Dockerfile. The agent's shell commands execute inside that
+ * container so the verifier can see the agent's filesystem changes.
  *
  * @since 0.3.0
  */
@@ -12,9 +17,13 @@ import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 import * as Str from 'effect/String';
+import { LanguageModel } from 'effect/unstable/ai';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
 import { AgentExecutor } from './AgentExecutor.js';
+import { AgentConfigService } from './AgentRunner.js';
 import { ContainerManager } from './ContainerManager.js';
+import { Environment } from './Environment.js';
 import { BenchmarkError } from './Errors.js';
 import { AgentMetrics } from './Metrics.js';
 import { type TaskSpec, discoverTasks } from './TaskSpec.js';
@@ -130,13 +139,29 @@ export namespace BenchmarkRunner {
 		'@autoagent/BenchmarkRunner'
 	) {}
 
+	/**
+	 * Live layer for the benchmark runner.
+	 *
+	 * Dependencies:
+	 * - `ContainerManager.Service` — Docker operations
+	 * - `LanguageModel.LanguageModel` — LLM provider for per-task agents
+	 * - `AgentConfigService.Service` — agent config (optional, defaults apply)
+	 * - `ChildProcessSpawner.ChildProcessSpawner` — for starting containers
+	 * - `FileSystem.FileSystem` — for task discovery
+	 *
+	 * @since 0.3.0
+	 */
 	export const layer = Layer.effect(
 		Service,
 		Effect.gen(function* () {
 			const container = yield* ContainerManager.Service;
-			const executor = yield* AgentExecutor.Service;
+			const lm = yield* LanguageModel.LanguageModel;
+			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 			const fileSystem = yield* FileSystem.FileSystem;
 			const clock = yield* Clock.Clock;
+			const configOption = yield* Effect.serviceOption(
+				AgentConfigService.Service
+			);
 
 			const wrapError = (operation: string) => (cause: unknown) =>
 				new BenchmarkError({
@@ -155,6 +180,34 @@ export namespace BenchmarkRunner {
 				return isNaN(parsed) ? 0 : parsed;
 			};
 
+			/**
+			 * Start a Docker container from the given image, returning
+			 * its container ID. The caller is responsible for cleanup
+			 * via `container.removeContainer`.
+			 */
+			const startContainer = Effect.fn('BenchmarkRunner.startContainer')(
+				function* (containerId: string, image: string) {
+					yield* spawner
+						.string(
+							ChildProcess.make(
+								'docker',
+								[
+									'run',
+									'-d',
+									'--name',
+									containerId,
+									image,
+									'sleep',
+									'infinity'
+								],
+								{ stdin: 'ignore' }
+							)
+						)
+						.pipe(Effect.mapError(wrapError('startContainer')));
+					return containerId;
+				}
+			);
+
 			const runTask = Effect.fn('BenchmarkRunner.runTask')(function* (
 				taskSpec: TaskSpec
 			) {
@@ -162,6 +215,7 @@ export namespace BenchmarkRunner {
 				const taskName = taskSpec.config.task.name;
 				const containerId = `bench-${taskName.replace(/\//g, '-')}-${startMs}`;
 				const imageTag = `bench-${taskName.replace(/\//g, '-')}:latest`;
+				const defaultImage = 'debian:bookworm-slim';
 
 				// 1. Build container image if Dockerfile exists
 				const hasDockerfile = Option.isSome(taskSpec.dockerfilePath);
@@ -178,12 +232,48 @@ export namespace BenchmarkRunner {
 						.pipe(Effect.mapError(wrapError('buildImage')));
 				}
 
-				// 2. Run agent against the task instruction
-				const agentResult = yield* executor
-					.runTask(taskSpec.instruction)
-					.pipe(Effect.mapError(wrapError('runAgent')));
+				// 2. Start a container from the task image (or default)
+				const image = hasDockerfile ? imageTag : defaultImage;
+				yield* startContainer(containerId, image);
 
-				// 3. Run verifier if test scripts exist
+				// 3. Run agent inside the task container
+				//    Create an Environment wrapping the running container
+				//    and build a per-task AgentExecutor layer.
+				const taskEnv = Environment.fromContainer(
+					containerId,
+					container
+				);
+				const envLayer = Layer.succeed(
+					Environment.Service,
+					Environment.Service.of(taskEnv)
+				);
+				const modelLayer = Layer.succeed(
+					LanguageModel.LanguageModel,
+					lm
+				);
+				const configLayer = Option.match(configOption, {
+					onNone: () => AgentConfigService.defaultLayer,
+					onSome: (cfg) =>
+						Layer.succeed(
+							AgentConfigService.Service,
+							AgentConfigService.Service.of(cfg)
+						)
+				});
+				const executorLayer = AgentExecutor.layer.pipe(
+					Layer.provide(modelLayer),
+					Layer.provide(envLayer),
+					Layer.provide(configLayer)
+				);
+
+				const agentResult = yield* Effect.gen(function* () {
+					const exec = yield* AgentExecutor.Service;
+					return yield* exec.runTask(taskSpec.instruction);
+				}).pipe(
+					Effect.provide(executorLayer),
+					Effect.mapError(wrapError('runAgent'))
+				);
+
+				// 4. Run verifier in the SAME container
 				const verifierOutput: string =
 					Arr.length(taskSpec.testScripts) > 0
 						? yield* container
@@ -207,7 +297,7 @@ export namespace BenchmarkRunner {
 								)
 						: '';
 
-				// 4. Parse score from verifier output
+				// 5. Parse score from verifier output in the same container
 				const scoreOutput = yield* container
 					.execInContainer({
 						containerId,
@@ -225,7 +315,7 @@ export namespace BenchmarkRunner {
 
 				const score = parseScore(scoreOutput);
 
-				// 5. Cleanup
+				// 6. Cleanup — remove the task container
 				yield* container
 					.removeContainer(containerId)
 					.pipe(Effect.catchTag('ContainerError', () => Effect.void));

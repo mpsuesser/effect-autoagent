@@ -317,6 +317,86 @@ export namespace Environment {
 				return Service.of({ exec, uploadFile, mkdir });
 			})
 		);
+
+	/**
+	 * Create an `Environment.Service` implementation that wraps an
+	 * already-running Docker container. Unlike `docker()`, this does NOT
+	 * create or destroy the container — the caller is responsible for
+	 * the container lifecycle.
+	 *
+	 * Used by `BenchmarkRunner` so the agent and verifier share the same
+	 * container.
+	 *
+	 * @since 0.4.0
+	 */
+	export const fromContainer = (
+		containerId: string,
+		mgr: ContainerManager.Interface
+	): Interface => ({
+		exec: Effect.fn('Environment.exec')(function* (options: {
+			readonly command: string;
+			readonly timeoutSec?: number;
+			readonly env?: Readonly<Record<string, string>>;
+		}) {
+			return yield* mgr
+				.execInContainer({
+					containerId,
+					command: options.command,
+					...(options.timeoutSec !== undefined
+						? { timeoutSec: options.timeoutSec }
+						: {}),
+					...(options.env !== undefined ? { env: options.env } : {})
+				})
+				.pipe(
+					Effect.mapError(
+						(cause) =>
+							new EnvironmentError({
+								operation: 'exec',
+								message: `Command failed: ${options.command}`,
+								cause
+							})
+					)
+				);
+		}),
+		uploadFile: Effect.fn('Environment.uploadFile')(function* (options: {
+			readonly content: string;
+			readonly targetPath: string;
+		}) {
+			yield* mgr
+				.copyToContainer({
+					containerId,
+					content: options.content,
+					targetPath: options.targetPath
+				})
+				.pipe(
+					Effect.mapError(
+						(cause) =>
+							new EnvironmentError({
+								operation: 'uploadFile',
+								message: `Upload failed: ${options.targetPath}`,
+								cause
+							})
+					)
+				);
+		}),
+		mkdir: Effect.fn('Environment.mkdir')(function* (path: string) {
+			yield* mgr
+				.execInContainer({
+					containerId,
+					command: `mkdir -p ${path}`
+				})
+				.pipe(
+					Effect.mapError(
+						(cause) =>
+							new EnvironmentError({
+								operation: 'mkdir',
+								message: `mkdir failed: ${path}`,
+								cause
+							})
+					)
+				);
+		})
+	});
 }
 
 // =============================================================================

@@ -29,7 +29,7 @@ import {
 const agentInfo = new AgentInfo({
 	name: 'autoagent',
 	version: '0.1.0',
-	model_name: 'gpt-5'
+	model_name: 'gpt-5.4'
 });
 
 const claudeAgentInfo = new AgentInfo({
@@ -43,7 +43,7 @@ describe('fromOpenAiItems', () => {
 		Effect.gen(function* () {
 			const traj = yield* fromOpenAiItems({
 				items: [],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 1000,
@@ -63,7 +63,7 @@ describe('fromOpenAiItems', () => {
 				items: [
 					new MessageItem({ type: 'message', text: 'Hello world' })
 				],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 500,
@@ -79,7 +79,7 @@ describe('fromOpenAiItems', () => {
 		Effect.gen(function* () {
 			const traj = yield* fromOpenAiItems({
 				items: [new MessageItem({ type: 'message', text: '' })],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 0,
@@ -100,7 +100,7 @@ describe('fromOpenAiItems', () => {
 						summaryTexts: ['Step 1: analyze', 'Step 2: execute']
 					})
 				],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 0,
@@ -131,7 +131,7 @@ describe('fromOpenAiItems', () => {
 						output: 'file1.txt\nfile2.txt'
 					})
 				],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 200,
@@ -161,7 +161,7 @@ describe('fromOpenAiItems', () => {
 						arguments: { command: 'exit' }
 					})
 				],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 0,
@@ -177,7 +177,7 @@ describe('fromOpenAiItems', () => {
 		Effect.gen(function* () {
 			const traj = yield* fromOpenAiItems({
 				items: [new MessageItem({ type: 'message', text: 'done' })],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 3000,
@@ -234,7 +234,7 @@ describe('fromOpenAiItems', () => {
 						text: 'Task complete'
 					})
 				],
-				modelName: 'gpt-5',
+				modelName: 'gpt-5.4',
 				sessionId: 'sess-1',
 				agentInfo,
 				durationMs: 5000,

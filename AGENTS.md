@@ -150,8 +150,8 @@ All errors extend `Schema.TaggedErrorClass` and are recoverable via
 ## Provider Layers
 
 ```ts
-openAiModel('gpt-5'); // Layer<LanguageModel, never, never>
-anthropicModel('claude-sonnet-4-20250514'); // Layer<LanguageModel, never, never>
+openAiModel('gpt-5.4'); // Layer<LanguageModel, never, never>
+anthropicModel('claude-sonnet-4-6'); // Layer<LanguageModel, never, never>
 ```
 
 Both are fully wired (include HttpClient + API key config). Pass directly
@@ -161,11 +161,11 @@ to `AgentExecutor.layer` via `Layer.provide`.
 
 ```sh
 # Run a single task
-bun run src/main.ts run -p openai -m gpt-5 --task "Write hello world"
+bun run src/main.ts run -p openai -m gpt-5.4 --task "Write hello world"
 
 # Run all benchmark tasks
-bun run src/main.ts bench -p openai -m gpt-5 --tasks-dir tasks/ -n 100 -o jobs
+bun run src/main.ts bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100 -o jobs
 
 # Run a single benchmark task by name
-bun run src/main.ts bench -p openai -m gpt-5 --task-name my-task
+bun run src/main.ts bench -p openai -m gpt-5.4 --task-name my-task
 ```

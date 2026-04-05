@@ -44,7 +44,7 @@ const EnvLayer = Environment.docker().pipe(
 	Layer.provide(ContainerLayer),
 	Layer.provide(BunServices.layer)
 );
-const ModelLayer = anthropicModel('claude-sonnet-4-20250514');
+const ModelLayer = anthropicModel('claude-sonnet-4-6');
 const ExecutorLayer = AgentExecutor.layer.pipe(
 	Layer.provide(ModelLayer),
 	Layer.provide(EnvLayer)

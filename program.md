@@ -16,7 +16,7 @@ environment, and must produce the correct final artifact or system state.
 
 Evaluation is done by task-specific verifiers.
 
-Do NOT change the model from `gpt-5` unless the human explicitly changes that
+Do NOT change the model from `gpt-5.4` unless the human explicitly changes that
 constraint.
 
 ## Effect v4 Source Reference
@@ -145,10 +145,10 @@ performance with simpler code is a real improvement.
 bun run check
 
 # Run all benchmark tasks
-bun run src/main.ts bench -p openai -m gpt-5 --tasks-dir tasks/ -n 100 -o jobs > run.log 2>&1
+bun run src/main.ts bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100 -o jobs > run.log 2>&1
 
 # Run a single benchmark task
-bun run src/main.ts bench -p openai -m gpt-5 --task-name "<task-name>" --tasks-dir tasks/ -o jobs > run.log 2>&1
+bun run src/main.ts bench -p openai -m gpt-5.4 --task-name "<task-name>" --tasks-dir tasks/ -o jobs > run.log 2>&1
 ```
 
 This assumes the current branch includes benchmark tasks in `tasks/`.

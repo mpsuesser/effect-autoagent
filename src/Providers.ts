@@ -45,7 +45,7 @@ export const AnthropicClientLayer = AnthropicClient.layerConfig({
  *
  * @example
  * ```ts
- * const layer = openAiModel("gpt-5")
+ * const layer = openAiModel("gpt-5.4")
  * ```
  *
  * @since 0.2.0
@@ -60,7 +60,7 @@ export const openAiModel = (model: string) =>
  *
  * @example
  * ```ts
- * const layer = anthropicModel("claude-sonnet-4-20250514")
+ * const layer = anthropicModel("claude-sonnet-4-6")
  * ```
  *
  * @since 0.2.0

@@ -56,12 +56,12 @@ describe('StepBuilder', () => {
 		const builder = new StepBuilder('2025-01-01T00:00:00Z');
 		const step = builder.step('agent', '(thinking)', {
 			reasoningContent: 'I should try ls first',
-			modelName: 'gpt-5'
+			modelName: 'gpt-5.4'
 		});
 		expect(Option.getOrThrow(step.reasoning_content)).toBe(
 			'I should try ls first'
 		);
-		expect(Option.getOrThrow(step.model_name)).toBe('gpt-5');
+		expect(Option.getOrThrow(step.model_name)).toBe('gpt-5.4');
 	});
 
 	it('omits optional fields when not provided', () => {
@@ -107,7 +107,7 @@ describe('buildTrajectory', () => {
 		const info = new AgentInfo({
 			name: 'autoagent',
 			version: '0.1.0',
-			model_name: 'gpt-5'
+			model_name: 'gpt-5.4'
 		});
 		const builder = new StepBuilder('2025-01-01T00:00:00Z');
 		const steps = [builder.step('agent', 'done')];

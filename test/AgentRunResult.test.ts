@@ -12,7 +12,7 @@ const makeTrajectory = () =>
 		agent: new AgentInfo({
 			name: 'test',
 			version: '0.1.0',
-			model_name: 'gpt-5'
+			model_name: 'gpt-5.4'
 		}),
 		steps: [],
 		final_metrics: Option.none()

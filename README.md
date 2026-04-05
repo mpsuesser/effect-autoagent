@@ -43,13 +43,13 @@ EOF
 bun run check
 
 # 4. Run a single ad-hoc task
-bun run src/main.ts run -p openai -m gpt-5 --task "Write hello world to hello.txt"
+bun run src/main.ts run -p openai -m gpt-5.4 --task "Write hello world to hello.txt"
 
 # 5. Run all benchmark tasks (requires tasks/ directory)
-bun run src/main.ts bench -p openai -m gpt-5 --tasks-dir tasks/ -n 100 -o jobs
+bun run src/main.ts bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100 -o jobs
 
 # 6. Run a single benchmark task by name
-bun run src/main.ts bench -p openai -m gpt-5 --task-name "<task-name>" --tasks-dir tasks/ -o jobs
+bun run src/main.ts bench -p openai -m gpt-5.4 --task-name "<task-name>" --tasks-dir tasks/ -o jobs
 ```
 
 ## Running the meta-agent
@@ -136,8 +136,8 @@ Both OpenAI and Anthropic are supported as fully-wired `LanguageModel` layers:
 ```ts
 import { openAiModel, anthropicModel } from 'effect-autoagent';
 
-openAiModel('gpt-5'); // Layer<LanguageModel>
-anthropicModel('claude-sonnet-4-20250514'); // Layer<LanguageModel>
+openAiModel('gpt-5.4'); // Layer<LanguageModel>
+anthropicModel('claude-sonnet-4-6'); // Layer<LanguageModel>
 ```
 
 API keys are read from config (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).

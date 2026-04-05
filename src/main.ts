@@ -43,9 +43,9 @@ const app = Command.make('effect-autoagent').pipe(
 	Command.withSharedFlags({
 		model: Flag.string('model').pipe(
 			Flag.withAlias('m'),
-			Flag.withDefault('gpt-5'),
+			Flag.withDefault('gpt-5.4'),
 			Flag.withDescription(
-				'Model identifier (e.g. gpt-5, claude-sonnet-4-20250514)'
+				'Model identifier (e.g. gpt-5.4, claude-sonnet-4-6)'
 			)
 		),
 		provider: Flag.choice('provider', ['openai', 'anthropic']).pipe(
@@ -311,12 +311,12 @@ const bench = Command.make(
 	Command.withExamples([
 		{
 			command:
-				'effect-autoagent bench -p openai -m gpt-5 --tasks-dir tasks/ -n 100',
-			description: 'Run all tasks with OpenAI gpt-5'
+				'effect-autoagent bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100',
+			description: 'Run all tasks with OpenAI gpt-5.4'
 		},
 		{
 			command:
-				'effect-autoagent bench --task-name my-task -p anthropic -m claude-sonnet-4-20250514',
+				'effect-autoagent bench --task-name my-task -p anthropic -m claude-sonnet-4-6',
 			description: 'Run a single named task'
 		}
 	])

@@ -12,7 +12,7 @@ describe('AgentConfig', () => {
 		expect(openAiDefault.systemPrompt).toBe(
 			'You are an agent that executes tasks'
 		);
-		expect(openAiDefault.model).toBe('gpt-5');
+		expect(openAiDefault.model).toBe('gpt-5.4');
 		expect(openAiDefault.maxTurns).toBe(30);
 		expect(openAiDefault.name).toBe('autoagent');
 		expect(openAiDefault.version).toBe('0.1.0');

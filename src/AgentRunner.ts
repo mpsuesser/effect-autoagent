@@ -53,7 +53,7 @@ export namespace AgentConfigService {
 	export const defaults: Interface = {
 		name: 'autoagent',
 		version: '0.1.0',
-		model: 'gpt-5',
+		model: 'gpt-5.4',
 		maxTurns: 30,
 		shellTimeoutSec: 120,
 		containerTimeoutSec: 600

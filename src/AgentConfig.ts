@@ -71,8 +71,8 @@ export class AgentConfig extends Schema.Class<AgentConfig>('AgentConfig')(
 			)
 		),
 		model: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'gpt-5'),
-			Schema.withConstructorDefault(() => Option.some('gpt-5'))
+			Schema.withDecodingDefault(() => 'gpt-5.4'),
+			Schema.withConstructorDefault(() => Option.some('gpt-5.4'))
 		),
 		maxTurns: Schema.Number.pipe(
 			Schema.withDecodingDefault(() => 30),

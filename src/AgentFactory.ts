@@ -8,9 +8,11 @@
  *
  * @since 0.4.0
  */
-import { Clock, Effect, Layer, Ref, ServiceMap } from 'effect';
+import { Clock, Effect, Layer, Match, Ref, ServiceMap } from 'effect';
+import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
+import * as Str from 'effect/String';
 import { Chat, LanguageModel, Prompt } from 'effect/unstable/ai';
 import type * as Tool from 'effect/unstable/ai/Tool';
 
@@ -24,6 +26,12 @@ import {
 import { Environment } from './Environment.js';
 import { AgentRunError } from './Errors.js';
 import { AgentMetrics, extractMetrics } from './Metrics.js';
+import type {
+	FallbackModels,
+	PlanAndExecute,
+	WithVerifier
+} from './OrchestrationSpec.js';
+import { anthropicModel, openAiModel } from './Providers.js';
 import { ToolFactory, type BuiltToolkit } from './ToolFactory.js';
 import { UsageSnapshot } from './UsageMetrics.js';
 
@@ -254,21 +262,57 @@ export namespace AgentFactory {
 					);
 
 					const runTask = Effect.fn('AgentRuntime.runTask')(
-						function* (instruction: string) {
-							// For now, all strategies use SingleLoop
-							// TODO: implement PlanAndExecute, WithVerifier, FallbackModels
-							if (blueprint.orchestration._tag !== 'SingleLoop') {
-								yield* Effect.logWarning(
-									`Orchestration '${blueprint.orchestration._tag}' not yet implemented, using SingleLoop`
-								);
-							}
-
-							return yield* runSingleLoop(
-								instruction,
-								blueprint,
-								builtToolkit,
-								loopLayer,
-								env
+						function* (
+							instruction: string
+						): Generator<
+							Effect.Effect<AgentRunResult, AgentRunError>,
+							AgentRunResult,
+							AgentRunResult
+						> {
+							return yield* Match.value(
+								blueprint.orchestration
+							).pipe(
+								Match.tag('SingleLoop', () =>
+									runSingleLoop(
+										instruction,
+										blueprint,
+										builtToolkit,
+										loopLayer,
+										env
+									)
+								),
+								Match.tag('PlanAndExecute', (spec) =>
+									runPlanAndExecute(
+										instruction,
+										blueprint,
+										builtToolkit,
+										loopLayer,
+										env,
+										lm,
+										spec
+									)
+								),
+								Match.tag('WithVerifier', (spec) =>
+									runWithVerifier(
+										instruction,
+										blueprint,
+										builtToolkit,
+										loopLayer,
+										env,
+										lm,
+										spec
+									)
+								),
+								Match.tag('FallbackModels', (spec) =>
+									runFallbackModels(
+										instruction,
+										blueprint,
+										builtToolkit,
+										env,
+										spec
+									)
+								),
+								Match.exhaustive
 							);
 						}
 					);
@@ -491,5 +535,450 @@ const runSingleLoop = Effect.fn('AgentFactory.runSingleLoop')(function* (
 		metrics,
 		exitReason,
 		finalText: finalState.finalText
+	});
+});
+
+// =============================================================================
+// Internal: PlanAndExecute strategy
+// =============================================================================
+
+/**
+ * Schema for the planner's structured output — an ordered list of
+ * action steps the executor should carry out sequentially.
+ *
+ * @internal
+ */
+class PlanSteps extends Schema.Class<PlanSteps>('PlanSteps')(
+	{
+		steps: Schema.Array(Schema.String).annotate({
+			description:
+				'Ordered list of concrete action steps to accomplish the task.'
+		})
+	},
+	{
+		description:
+			'Structured plan output containing ordered steps for task execution.'
+	}
+) {}
+
+/**
+ * Accumulated state for plan-and-execute step reduction.
+ *
+ * @internal
+ */
+interface PlanAccumulator {
+	readonly lastResult: Option.Option<AgentRunResult>;
+	readonly totalInputTokens: number;
+	readonly totalOutputTokens: number;
+	readonly totalTurns: number;
+}
+
+/** @internal */
+const initialPlanAccumulator: PlanAccumulator = {
+	lastResult: Option.none(),
+	totalInputTokens: 0,
+	totalOutputTokens: 0,
+	totalTurns: 0
+};
+
+/**
+ * Two-phase plan-and-execute strategy.
+ *
+ * Phase 1: A planner LLM call produces a structured list of steps using
+ * `generateObject` with the `PlanSteps` schema.
+ *
+ * Phase 2: Each step is executed sequentially via `Effect.reduce`,
+ * accumulating metrics and carrying context between steps.
+ *
+ * @internal
+ */
+const runPlanAndExecute = Effect.fn('AgentFactory.planAndExecute')(function* (
+	instruction: string,
+	blueprint: AgentBlueprint,
+	builtToolkit: BuiltToolkit,
+	loopLayer: Layer.Layer<LanguageModel.LanguageModel | Environment.Service>,
+	env: Environment.Interface,
+	lm: LanguageModel.Service,
+	spec: PlanAndExecute
+) {
+	yield* Effect.logInfo('PlanAndExecute: generating plan');
+
+	// Phase 1: Generate plan via structured output
+	const planResponse = yield* lm
+		.generateObject({
+			prompt: [
+				{
+					role: 'system',
+					content: spec.plannerPrompt
+				},
+				{
+					role: 'user',
+					content: [
+						{
+							type: 'text',
+							text: `Break this task into at most ${spec.maxPlanSteps} concrete, sequential steps:\n\n${instruction}`
+						}
+					]
+				}
+			],
+			schema: PlanSteps
+		})
+		.pipe(
+			Effect.mapError(
+				(cause) =>
+					new AgentRunError({
+						message: 'Plan generation failed',
+						cause
+					})
+			),
+			Effect.provide(loopLayer)
+		);
+
+	const steps = Arr.take(planResponse.value.steps, spec.maxPlanSteps);
+	const totalSteps = Arr.length(steps);
+
+	yield* Effect.logInfo(`PlanAndExecute: executing ${totalSteps} steps`);
+
+	// Phase 2: Execute steps sequentially via reduce, accumulating metrics
+	const startMs = yield* Clock.currentTimeMillis;
+
+	const indexedSteps = Arr.map(steps, (step, index) => ({
+		step,
+		index
+	}));
+
+	const accRef = yield* Ref.make<PlanAccumulator>(initialPlanAccumulator);
+
+	yield* Effect.forEach(
+		indexedSteps,
+		({ step, index }) =>
+			Effect.gen(function* () {
+				const acc = yield* Ref.get(accRef);
+				const prevOutput = Option.map(acc.lastResult, (r) =>
+					Option.getOrElse(r.finalText, () => '(no output)')
+				);
+
+				const stepInstruction = Option.match(prevOutput, {
+					onNone: () =>
+						`Step ${index + 1}/${totalSteps}: ${step}\n\nOriginal task: ${instruction}`,
+					onSome: (prev) =>
+						`Step ${index + 1}/${totalSteps}: ${step}\n\nOriginal task: ${instruction}\n\nPrevious step output: ${prev}`
+				});
+
+				yield* Effect.logDebug(
+					`PlanAndExecute: step ${index + 1}`,
+					step
+				);
+
+				const stepResult = yield* runSingleLoop(
+					stepInstruction,
+					blueprint,
+					builtToolkit,
+					loopLayer,
+					env
+				);
+
+				yield* Ref.set(accRef, {
+					lastResult: Option.some(stepResult),
+					totalInputTokens:
+						acc.totalInputTokens + stepResult.metrics.inputTokens,
+					totalOutputTokens:
+						acc.totalOutputTokens + stepResult.metrics.outputTokens,
+					totalTurns: acc.totalTurns + stepResult.metrics.numTurns
+				});
+			}),
+		{ concurrency: 1 }
+	);
+
+	const accumulated = yield* Ref.get(accRef);
+
+	const endMs = yield* Clock.currentTimeMillis;
+	const durationMs = Number(endMs - startMs);
+
+	const aggregatedMetrics = new AgentMetrics({
+		inputTokens: accumulated.totalInputTokens,
+		outputTokens: accumulated.totalOutputTokens,
+		cachedTokens: 0,
+		costUsd: Option.none(),
+		durationMs,
+		numTurns: accumulated.totalTurns
+	});
+
+	return new AgentRunResult({
+		trajectory: Option.match(accumulated.lastResult, {
+			onNone: () => mockTrajectory(blueprint),
+			onSome: (r) => r.trajectory
+		}),
+		metrics: aggregatedMetrics,
+		exitReason: Option.match(accumulated.lastResult, {
+			onNone: () => 'completed' satisfies ExitReason,
+			onSome: (r) => r.exitReason
+		}),
+		finalText: Option.flatMap(accumulated.lastResult, (r) => r.finalText)
+	});
+});
+
+// =============================================================================
+// Internal: WithVerifier strategy
+// =============================================================================
+
+/**
+ * Accumulated state for the verify-and-retry loop.
+ *
+ * @internal
+ */
+interface VerifierAccumulator {
+	readonly result: AgentRunResult;
+	readonly instruction: string;
+	readonly passed: boolean;
+}
+
+/**
+ * Verify-and-retry strategy.
+ *
+ * Runs the agent via `SingleLoop`, then sends the result to a verifier
+ * LLM call. If the verifier responds with "PASS", the result is returned.
+ * If "FAIL", the agent is re-run with the verifier's feedback appended,
+ * up to `maxRetries` times.
+ *
+ * Uses `Ref`-based state for the retry loop to avoid mutable `let` bindings.
+ *
+ * @internal
+ */
+const runWithVerifier = Effect.fn('AgentFactory.withVerifier')(function* (
+	instruction: string,
+	blueprint: AgentBlueprint,
+	builtToolkit: BuiltToolkit,
+	loopLayer: Layer.Layer<LanguageModel.LanguageModel | Environment.Service>,
+	env: Environment.Interface,
+	lm: LanguageModel.Service,
+	spec: WithVerifier
+) {
+	// Run first attempt
+	yield* Effect.logInfo(`WithVerifier: attempt 1/${spec.maxRetries + 1}`);
+
+	const firstResult = yield* runSingleLoop(
+		instruction,
+		blueprint,
+		builtToolkit,
+		loopLayer,
+		env
+	);
+
+	// Build retry attempts array [0..maxRetries-1] for reduce
+	const retryAttempts = Arr.makeBy(spec.maxRetries, (i) => i);
+
+	const stateRef = yield* Ref.make<VerifierAccumulator>({
+		result: firstResult,
+		instruction,
+		passed: false
+	});
+
+	// Verify and optionally retry
+	const verify = (
+		result: AgentRunResult
+	): Effect.Effect<boolean, AgentRunError> =>
+		Effect.gen(function* () {
+			const resultText = Option.getOrElse(
+				result.finalText,
+				() => `Agent exited with: ${result.exitReason}`
+			);
+
+			yield* Effect.logDebug('WithVerifier: verifying result');
+			const verifyResponse = yield* lm
+				.generateText({
+					prompt: [
+						{
+							role: 'system',
+							content: spec.verifierPrompt
+						},
+						{
+							role: 'user',
+							content: [
+								{
+									type: 'text',
+									text: `Task: ${instruction}\n\nAgent output:\n${resultText}\n\nDoes this output correctly accomplish the task? Reply with PASS or FAIL followed by a brief explanation.`
+								}
+							]
+						}
+					]
+				})
+				.pipe(
+					Effect.mapError(
+						(cause) =>
+							new AgentRunError({
+								message: 'Verification failed',
+								cause
+							})
+					),
+					Effect.provide(loopLayer)
+				);
+
+			const verdict = verifyResponse.text;
+			const passed = Str.toUpperCase(verdict).startsWith('PASS');
+
+			yield* Effect.logInfo(
+				`WithVerifier: verdict=${passed ? 'PASS' : 'FAIL'}`
+			);
+
+			// Update state with feedback for potential retry
+			if (!passed) {
+				yield* Ref.set(stateRef, {
+					result,
+					instruction: `${instruction}\n\nPrevious attempt failed verification. Verifier feedback:\n${verdict}\n\nPlease try again, addressing the feedback above.`,
+					passed: false
+				});
+			} else {
+				yield* Ref.set(stateRef, { result, instruction, passed: true });
+			}
+
+			return passed;
+		});
+
+	// Verify first attempt
+	const firstPassed = yield* verify(firstResult);
+	if (firstPassed) {
+		return firstResult;
+	}
+
+	// Retry loop — short-circuits via Ref state on pass
+	yield* Effect.forEach(
+		retryAttempts,
+		(attemptIdx) =>
+			Effect.gen(function* () {
+				const state = yield* Ref.get(stateRef);
+				if (state.passed) return;
+
+				yield* Effect.logInfo(
+					`WithVerifier: attempt ${attemptIdx + 2}/${spec.maxRetries + 1}`
+				);
+
+				const retryResult = yield* runSingleLoop(
+					state.instruction,
+					blueprint,
+					builtToolkit,
+					loopLayer,
+					env
+				);
+
+				yield* verify(retryResult);
+			}),
+		{ concurrency: 1 }
+	);
+
+	const finalState = yield* Ref.get(stateRef);
+	if (!finalState.passed) {
+		yield* Effect.logWarning(
+			'WithVerifier: all retries exhausted, returning last result'
+		);
+	}
+	return finalState.result;
+});
+
+// =============================================================================
+// Internal: FallbackModels strategy
+// =============================================================================
+
+/**
+ * Infer the provider from a model name using prefix heuristics.
+ *
+ * - `claude-*` → Anthropic
+ * - Everything else → OpenAI (safest fallback for unknown models)
+ *
+ * @internal
+ */
+const inferProvider = (modelName: string): 'openai' | 'anthropic' =>
+	Match.value(modelName).pipe(
+		Match.when(Str.startsWith('claude'), () => 'anthropic' as const),
+		Match.orElse(() => 'openai' as const)
+	);
+
+/**
+ * Model fallback strategy.
+ *
+ * Tries each model in the spec's `models` array in order. If the agent
+ * run fails with an `AgentRunError`, the next model is tried. The first
+ * successful result is returned. If all models fail, the last error is
+ * propagated.
+ *
+ * Each model gets a fresh `LanguageModel` layer constructed by inferring
+ * the provider from the model name.
+ *
+ * Uses `Effect.reduce` with `Option`-based accumulation — no mutable state.
+ *
+ * @internal
+ */
+const runFallbackModels = Effect.fn('AgentFactory.fallbackModels')(function* (
+	instruction: string,
+	blueprint: AgentBlueprint,
+	builtToolkit: BuiltToolkit,
+	env: Environment.Interface,
+	spec: FallbackModels
+) {
+	const envLayer = Layer.succeed(Environment.Service, env);
+
+	/** Try a single model, returning Some(result) on success, None on failure. */
+	const tryModel = (
+		modelName: string
+	): Effect.Effect<Option.Option<AgentRunResult>> =>
+		Effect.gen(function* () {
+			yield* Effect.logInfo(
+				`FallbackModels: trying model '${modelName}'`
+			);
+
+			const provider = inferProvider(modelName);
+			// ConfigError from API key lookup is unrecoverable — orDie per EF-31
+			const modelLayer = Layer.orDie(
+				provider === 'openai'
+					? openAiModel(modelName)
+					: anthropicModel(modelName)
+			);
+
+			const loopLayer = Layer.mergeAll(modelLayer, envLayer).pipe(
+				Layer.provideMerge(builtToolkit.handlerLayer)
+			);
+
+			return yield* runSingleLoop(
+				instruction,
+				blueprint,
+				builtToolkit,
+				loopLayer,
+				env
+			).pipe(
+				Effect.map(Option.some),
+				Effect.catchTag('AgentRunError', (error) => {
+					return Effect.gen(function* () {
+						yield* Effect.logWarning(
+							`FallbackModels: model '${modelName}' failed: ${error.message}`
+						);
+						return Option.none<AgentRunResult>();
+					});
+				})
+			);
+		});
+
+	// Reduce over models, short-circuiting on first success
+	const result = yield* Arr.reduce(
+		Array.from(spec.models),
+		Effect.succeed(Option.none<AgentRunResult>()),
+		(prevEffect, modelName) =>
+			Effect.flatMap(prevEffect, (prev) =>
+				Option.match(prev, {
+					onSome: (r) => Effect.succeed(Option.some(r)),
+					onNone: () => tryModel(modelName)
+				})
+			)
+	);
+
+	return yield* Option.match(result, {
+		onSome: (r) => {
+			return Effect.succeed(r);
+		},
+		onNone: () =>
+			Effect.fail(
+				new AgentRunError({
+					message: 'All fallback models failed'
+				})
+			)
 	});
 });

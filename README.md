@@ -1,6 +1,8 @@
 # effect-autoagent
 
-> **Experimental adaptation.** This project is an experimental [Effect](https://effect.website)-native rewrite of the original [autoagent](https://github.com/kevinrgu/autoagent) framework by [thirdlayer](https://www.thirdlayer.inc). The core idea is identical — give a meta-agent a task, let it build and iterate on an agent harness autonomously. The implementation replaces the single-file Python harness with a modular Effect v4 TypeScript codebase built on `@effect/ai-*` providers, typed services, and schema-driven domain models.
+> **effect-autoagent** is a framework for building, optimizing, and deploying AI agents as Effect services. Define an agent as a declarative blueprint. Run it against benchmarks. The meta-agent iterates on the blueprint — not source code — to improve performance. Deploy the optimized agent as an HTTP API, MCP server, or embedded Effect service.
+
+Based on the original [autoagent](https://github.com/kevinrgu/autoagent) framework by [thirdlayer](https://www.thirdlayer.inc), reimplemented as a modular [Effect](https://effect.website) v4 TypeScript codebase built on `@effect/ai-*` providers, typed services, and schema-driven domain models.
 
 Like the original: you don't touch the harness source files directly. Instead, you program `program.md`, the Markdown file that provides context to the meta-agent and defines the agent-engineering loop.
 
@@ -24,6 +26,25 @@ The repo is structured around typed Effect services:
 The three `src/` files above are the **editable surface** — everything the
 meta-agent is allowed to modify. All other source modules are fixed
 infrastructure.
+
+## Blueprint-driven optimization
+
+Agents are defined as `AgentBlueprint` — a validated, serializable `Schema.Class`
+configuration that captures everything about an agent: model, system prompt,
+tools, orchestration strategy, and constraints.
+
+- **Tools are data, not code.** Each tool is a `ToolSpec` (Schema.Class) describing
+  name, parameters, and implementation kind. The `ToolFactory` service interprets
+  `ToolSpec[]` into an Effect AI `Toolkit` at runtime.
+- **Orchestration is declarative.** `OrchestrationSpec` is a tagged union
+  (`SingleLoop`, `PlanAndExecute`, `WithVerifier`, `FallbackModels`) that lets
+  the meta-agent change agent architecture without editing source files.
+- **Mutations are structured.** The meta-agent produces `BlueprintPatch` values
+  (e.g., `SetModel`, `AddTool`, `SetOrchestration`) instead of source diffs.
+  Patches are applied atomically and can be persisted with `BlueprintStore`.
+- **Deployment is a layer away.** The optimized blueprint can be served as an
+  HTTP API (`AgentHttpApi`), an MCP server (`AgentMcpServer`), or composed
+  directly into an Effect application via `AgentFactory.fromBlueprint`.
 
 ## Quick start
 
@@ -63,6 +84,21 @@ Read program.md and let's kick off a new experiment!
 The meta-agent will read the directive, inspect the current harness, run the
 benchmark, diagnose failures, modify the editable files, and iterate.
 
+## Deployment
+
+```bash
+# Deploy as HTTP API
+# (coming soon — handler implementation complete, CLI integration pending)
+
+# Deploy as MCP server
+# (coming soon — tool definitions complete, CLI integration pending)
+```
+
+Both deployment targets are fully defined as Effect services (`AgentHttpApi`,
+`AgentMcpServer`) and can be composed programmatically today. CLI subcommands
+for `serve http` and `serve mcp` will be added once the `AgentFactory`
+integration is finalized.
+
 ## Project structure
 
 ```text
@@ -89,6 +125,15 @@ src/
   TaskSpec.ts                — task directory reader with TOML parsing
   TrajectoryConverter.ts     — OpenAI/Claude SDK messages → ATIF conversion
   UsageMetrics.ts            — token usage accumulation schemas
+  ToolSpec.ts                — declarative tool definitions (Schema.Class)
+  OrchestrationSpec.ts       — agent execution strategy discriminated union
+  AgentBlueprint.ts          — central declarative agent configuration
+  BlueprintPatch.ts          — structured mutations to blueprints
+  ToolFactory.ts             — ToolSpec[] → Effect AI Toolkit interpreter
+  AgentFactory.ts            — AgentBlueprint → runnable AgentRuntime
+  BlueprintStore.ts          — blueprint persistence + versioning
+  AgentHttpApi.ts            — HTTP API definition for agent deployment
+  AgentMcpServer.ts          — MCP server exposing agent as tool
   main.ts                    — CLI entrypoint (not exported from barrel)
   index.ts                   — library barrel — all public exports
 program.md                   — meta-agent instructions + directive
@@ -127,6 +172,18 @@ MetaAgent (optimizer loop)
   ├── recordAndEvaluate()  → runs benchmark, decides keep/discard
   ├── step()               → one full iteration
   └── loop()               → iterates until stale
+
+AgentBlueprint (declarative config)
+  ├── ToolSpec[]          → ToolFactory → Toolkit
+  ├── OrchestrationSpec   → AgentFactory → runTask
+  └── Constraints
+        │
+        ▼
+AgentFactory.fromBlueprint(blueprint)
+  │
+  ├── HTTP API (AgentHttpApi)
+  ├── MCP Server (AgentMcpServer)
+  └── Embedded (Layer composition)
 ```
 
 ## Providers

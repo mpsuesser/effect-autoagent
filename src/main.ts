@@ -52,6 +52,13 @@ const app = Command.make('effect-autoagent').pipe(
 			Flag.withAlias('p'),
 			Flag.withDefault('openai' as const),
 			Flag.withDescription('AI provider to use')
+		),
+		blueprint: Flag.file('blueprint', { mustExist: true }).pipe(
+			Flag.withAlias('b'),
+			Flag.optional,
+			Flag.withDescription(
+				'Path to a blueprint JSON file (AgentBlueprint)'
+			)
 		)
 	}),
 	Command.withDescription(
@@ -156,7 +163,9 @@ const run = Command.make(
 		)
 	},
 	Effect.fn(function* ({ task, taskFile, outputDir, maxTurns }) {
-		const { provider, model } = yield* app;
+		const { provider, model, blueprint: _blueprintFile } = yield* app;
+		// TODO: use blueprint — when provided, read and decode as AgentBlueprint
+		// via AgentFactory integration (not yet wired)
 		const fs = yield* FileSystem.FileSystem;
 
 		const instruction = yield* Option.match(task, {
@@ -239,7 +248,9 @@ const bench = Command.make(
 		maxTurns,
 		taskName
 	}) {
-		const { provider, model } = yield* app;
+		const { provider, model, blueprint: _blueprintFile } = yield* app;
+		// TODO: use blueprint — when provided, read and decode as AgentBlueprint
+		// via AgentFactory integration (not yet wired)
 		const fs = yield* FileSystem.FileSystem;
 
 		// Build benchmark layer stack — BenchmarkRunner manages per-task

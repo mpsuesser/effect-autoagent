@@ -52,6 +52,64 @@ export {
 } from './UsageMetrics.js';
 
 // ---------------------------------------------------------------------------
+// Tool Specification (declarative tool definitions)
+// ---------------------------------------------------------------------------
+export {
+	FileListImpl,
+	FileReadImpl,
+	FileWriteImpl,
+	HttpGetImpl,
+	ParamSpec,
+	ParamType,
+	type ParamType as ParamTypeType,
+	RunShellImpl,
+	ShellCommandImpl,
+	ToolImplementation,
+	type ToolImplementation as ToolImplementationType,
+	ToolSpec,
+	defaultToolSpecs,
+	isFileList,
+	isFileRead,
+	isFileWrite,
+	isHttpGet,
+	isRunShell,
+	isShellCommand
+} from './ToolSpec.js';
+
+// ---------------------------------------------------------------------------
+// Blueprint Patch (structured mutations)
+// ---------------------------------------------------------------------------
+export {
+	AddTool,
+	BlueprintPatch,
+	type BlueprintPatch as BlueprintPatchType,
+	ModifyTool,
+	RemoveTool,
+	SetConstraints,
+	SetModel,
+	SetOrchestration,
+	SetSystemPrompt,
+	applyPatches
+} from './BlueprintPatch.js';
+
+// ---------------------------------------------------------------------------
+// Agent Blueprint
+// ---------------------------------------------------------------------------
+export {
+	AgentBlueprint,
+	AgentConstraints,
+	BlueprintJson,
+	ModelConfig,
+	ModelProvider,
+	ThinkingConfig as BlueprintThinkingConfig,
+	decodeBlueprintJson,
+	defaultBlueprint,
+	encodeBlueprintJson
+} from './AgentBlueprint.js';
+
+export { BlueprintStore, BlueprintStoreError } from './BlueprintStore.js';
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 export {
@@ -132,6 +190,8 @@ export {
 
 export { AgentExecutor } from './AgentExecutor.js';
 
+export { AgentFactory, AgentFactoryError } from './AgentFactory.js';
+
 // ---------------------------------------------------------------------------
 // Provider Layers (bundled OpenAI + Anthropic)
 // ---------------------------------------------------------------------------
@@ -182,6 +242,8 @@ export {
 // Harness Specification (meta-agent optimization surface)
 // ---------------------------------------------------------------------------
 export {
+	BlueprintDiagnosisOutput,
+	BlueprintProposal,
 	DiagnosisOutput,
 	EvaluationResult,
 	FailureDiagnosis,
@@ -196,6 +258,24 @@ export {
 } from './HarnessSpec.js';
 
 // ---------------------------------------------------------------------------
+// Orchestration Strategy
+// ---------------------------------------------------------------------------
+export {
+	FallbackModels,
+	OrchestrationSpec,
+	type OrchestrationSpec as OrchestrationSpecType,
+	PlanAndExecute,
+	SingleLoop,
+	WithVerifier,
+	defaultOrchestration,
+	isFallbackModels,
+	isPlanAndExecute,
+	isSingleLoop,
+	isWithVerifier,
+	match as matchOrchestration
+} from './OrchestrationSpec.js';
+
+// ---------------------------------------------------------------------------
 // Task Specification
 // ---------------------------------------------------------------------------
 export {
@@ -208,6 +288,40 @@ export {
 	discoverTasks,
 	parseTaskToml
 } from './TaskSpec.js';
+
+// ---------------------------------------------------------------------------
+// Tool Factory
+// ---------------------------------------------------------------------------
+export {
+	type BuiltToolkit,
+	ToolFactory,
+	ToolFactoryError
+} from './ToolFactory.js';
+
+// ---------------------------------------------------------------------------
+// MCP Server
+// ---------------------------------------------------------------------------
+export {
+	AgentMcpLayer,
+	AgentMcpStdioLayer,
+	AgentMcpToolkit,
+	BlueprintResource,
+	GetBlueprint,
+	RunTask
+} from './AgentMcpServer.js';
+
+// ---------------------------------------------------------------------------
+// HTTP API
+// ---------------------------------------------------------------------------
+export {
+	AgentApi,
+	AgentApiGroup,
+	AgentApiHandlers,
+	AgentHttpError,
+	RunTaskMetrics,
+	RunTaskPayload,
+	RunTaskResponse
+} from './AgentHttpApi.js';
 
 // ---------------------------------------------------------------------------
 // Meta-Agent Optimizer

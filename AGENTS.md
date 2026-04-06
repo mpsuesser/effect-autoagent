@@ -112,6 +112,15 @@ MetaAgent (optimizer loop)
 | `TaskSpec.ts`            | Task directory reader with TOML parsing             |
 | `TrajectoryConverter.ts` | OpenAI/Claude SDK messages → ATIF conversion        |
 | `UsageMetrics.ts`        | Token usage accumulation schemas                    |
+| `ToolSpec.ts`            | Declarative tool definitions (Schema.Class)         |
+| `OrchestrationSpec.ts`   | Agent execution strategy discriminated union        |
+| `AgentBlueprint.ts`      | Central declarative agent configuration             |
+| `BlueprintPatch.ts`      | Structured mutations to blueprints                  |
+| `ToolFactory.ts`         | ToolSpec[] → Effect AI Toolkit interpreter          |
+| `AgentFactory.ts`        | AgentBlueprint → runnable AgentRuntime              |
+| `BlueprintStore.ts`      | Blueprint persistence + versioning                  |
+| `AgentHttpApi.ts`        | HTTP API definition for agent deployment            |
+| `AgentMcpServer.ts`      | MCP server exposing agent as tool                   |
 | `main.ts`                | CLI entrypoint (not exported from barrel)           |
 | `index.ts`               | Library barrel — all public exports                 |
 
@@ -126,6 +135,9 @@ MetaAgent (optimizer loop)
 | `ContainerManager.Service`   | `@autoagent/ContainerManager` | ChildProcessSpawner                     |
 | `ExperimentLog.Service`      | `@autoagent/ExperimentLog`    | FileSystem                              |
 | `AgentConfigService.Service` | `@autoagent/AgentConfig`      | (none)                                  |
+| `ToolFactory.Service`        | `@autoagent/ToolFactory`      | Environment                             |
+| `AgentFactory.Service`       | `@autoagent/AgentFactory`     | ToolFactory, LanguageModel, Environment |
+| `BlueprintStore.Service`     | `@autoagent/BlueprintStore`   | FileSystem                              |
 
 ## Editable vs Fixed Boundary
 

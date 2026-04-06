@@ -8,24 +8,28 @@ Like the original: you don't touch the harness source files directly. Instead, y
 
 ## How it works
 
-The meta-agent hill-climbs on benchmark score. It reads the harness, runs the agent against a task suite, diagnoses failures, modifies the editable harness files, and repeats — keeping changes that improve the score and discarding those that don't.
+The meta-agent hill-climbs on benchmark score. It reads the current blueprint,
+runs the agent against a task suite, diagnoses failures, proposes structured
+`BlueprintPatch` mutations, and repeats — keeping changes that improve the score
+and discarding those that don't.
 
-The repo is structured around typed Effect services:
+The optimization surface is entirely declarative:
 
-- **`src/AgentConfig.ts`** — agent configuration: system prompt, model, max
-  turns, thinking budget, tool presets. The meta-agent's primary tuning surface.
-- **`src/AgentToolkit.ts`** — tool definitions using the Effect AI `Tool` and
-  `Toolkit` APIs. Add, remove, or modify tools that the agent can call.
-- **`src/AgentExecutor.ts`** — the agentic loop built on Effect AI `Chat`.
-  Controls conversation flow, turn management, and tool resolution.
+- **`AgentBlueprint`** — a validated `Schema.Class` that fully describes an
+  agent: model, system prompt, tools, orchestration strategy, and constraints.
+- **`BlueprintPatch`** — structured mutations (`SetSystemPrompt`, `AddTool`,
+  `SetOrchestration`, etc.) that the meta-agent produces instead of source diffs.
 - **`program.md`** — instructions for the meta-agent + the directive (what kind
   of agent to build). **This file is edited by the human.**
 - **`tasks/`** — evaluation tasks in [Harbor](https://harborframework.com/docs)
   format, typically added in benchmark-specific branches.
 
-The three `src/` files above are the **editable surface** — everything the
-meta-agent is allowed to modify. All other source modules are fixed
-infrastructure.
+The meta-agent modifies the blueprint, not source code. The framework interprets
+blueprints at runtime to construct and run agents.
+
+A legacy source-editing path (`AgentConfig.ts`, `AgentToolkit.ts`,
+`AgentExecutor.ts`) is preserved for backward compatibility and direct
+experimentation.
 
 ## Blueprint-driven optimization
 
@@ -66,11 +70,17 @@ bun run check
 # 4. Run a single ad-hoc task
 bun run src/main.ts run -p openai -m gpt-5.4 --task "Write hello world to hello.txt"
 
-# 5. Run all benchmark tasks (requires tasks/ directory)
+# 5. Run with a blueprint
+bun run src/main.ts run --blueprint agent.json --task "Write hello world to hello.txt"
+
+# 6. Run all benchmark tasks (requires tasks/ directory)
 bun run src/main.ts bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100 -o jobs
 
-# 6. Run a single benchmark task by name
+# 7. Run a single benchmark task by name
 bun run src/main.ts bench -p openai -m gpt-5.4 --task-name "<task-name>" --tasks-dir tasks/ -o jobs
+
+# 8. Run a single benchmark task with a blueprint
+bun run src/main.ts bench --task-name "<task-name>" --blueprint agent.json --tasks-dir tasks/
 ```
 
 ## Running the meta-agent
@@ -81,31 +91,32 @@ Point your coding agent at the repo and prompt:
 Read program.md and let's kick off a new experiment!
 ```
 
-The meta-agent will read the directive, inspect the current harness, run the
-benchmark, diagnose failures, modify the editable files, and iterate.
+The meta-agent will read the directive, inspect the current blueprint, run the
+benchmark, diagnose failures, produce `BlueprintPatch` mutations, and iterate.
 
 ## Deployment
 
 ```bash
 # Deploy as HTTP API
-# (coming soon — handler implementation complete, CLI integration pending)
+bun run src/main.ts serve http --port 3000 --blueprint agent.json
+# Endpoints: POST /api/run, GET /api/blueprint, PUT /api/blueprint, GET /api/health
 
-# Deploy as MCP server
-# (coming soon — tool definitions complete, CLI integration pending)
+# Deploy as MCP server (stdio transport, e.g. for Claude Desktop)
+bun run src/main.ts serve mcp --blueprint agent.json
 ```
 
-Both deployment targets are fully defined as Effect services (`AgentHttpApi`,
-`AgentMcpServer`) and can be composed programmatically today. CLI subcommands
-for `serve http` and `serve mcp` will be added once the `AgentFactory`
-integration is finalized.
+Both deployment targets require a `--blueprint` file. The HTTP server exposes
+OpenAPI-documented endpoints via `AgentHttpApi`. The MCP server exposes
+`RunTask` and `GetBlueprint` tools plus a `autoagent://blueprint` resource via
+`AgentMcpServer`. Both can also be composed programmatically as Effect layers.
 
 ## Project structure
 
 ```text
 src/
-  AgentConfig.ts             — agent configuration schemas (editable)
-  AgentToolkit.ts            — tool definitions via Effect AI (editable)
-  AgentExecutor.ts           — agentic loop via Effect AI Chat (editable)
+  AgentConfig.ts             — agent configuration schemas (legacy editable)
+  AgentToolkit.ts            — tool definitions via Effect AI (legacy editable)
+  AgentExecutor.ts           — agentic loop via Effect AI Chat (legacy editable)
   AgentRunner.ts             — config service + legacy SDK runner
   AgentRunResult.ts          — run result schema (trajectory + metrics + exit)
   Atif.ts                    — ATIF trajectory schema (steps, observations, tools)
@@ -147,19 +158,34 @@ results.tsv                  — experiment log (created by meta-agent, gitignor
 
 ```text
 CLI (main.ts)
-  ├── run    → single task execution
-  └── bench  → benchmark suite
+  ├── run        → single task execution (legacy or blueprint)
+  ├── bench      → benchmark suite (legacy or blueprint)
+  ├── serve http → HTTP API server
+  └── serve mcp  → MCP stdio server
         │
         ▼
-AgentExecutor ──► LanguageModel (OpenAI / Anthropic via @effect/ai-*)
-  │                   │
-  │                   ▼
-  │              AgentToolkit (RunShell tool)
-  │
-  ▼
+AgentBlueprint (declarative config)
+  ├── ToolSpec[]          → ToolFactory → Toolkit
+  ├── OrchestrationSpec   → AgentFactory → runTask
+  └── Constraints
+        │
+        ▼
+AgentFactory.fromBlueprint(blueprint) ──► LanguageModel (via @effect/ai-*)
+  │                                            │
+  │    Orchestration strategies:                │
+  │    ├── SingleLoop (standard agentic loop)   │
+  │    ├── PlanAndExecute (structured output)   │
+  │    ├── WithVerifier (verify + retry)        │
+  │    └── FallbackModels (model cascade)       │
+  │                                             │
+  ▼                                             ▼
 Environment (local shell or Docker container)
   │
-  ▼
+  ├── HTTP API (AgentHttpApi)     → POST /api/run, GET/PUT /api/blueprint
+  ├── MCP Server (AgentMcpServer) → RunTask, GetBlueprint tools
+  └── Embedded (Layer composition)
+        │
+        ▼
 BenchmarkRunner ──► TaskSpec (reads task.toml dirs)
   │                     │
   │                     ▼
@@ -167,23 +193,11 @@ BenchmarkRunner ──► TaskSpec (reads task.toml dirs)
   │
   ▼
 MetaAgent (optimizer loop)
-  ├── diagnose()           → LLM analyzes failures → DiagnosisOutput
-  ├── readHarness()        → reads editable files  → HarnessFile[]
-  ├── recordAndEvaluate()  → runs benchmark, decides keep/discard
+  ├── diagnoseBlueprint()  → LLM analyzes failures → BlueprintDiagnosisOutput
+  ├── evaluatePatches()    → applies patches, benchmarks, decides keep/discard
+  ├── currentBlueprint     → reads current blueprint from store
   ├── step()               → one full iteration
   └── loop()               → iterates until stale
-
-AgentBlueprint (declarative config)
-  ├── ToolSpec[]          → ToolFactory → Toolkit
-  ├── OrchestrationSpec   → AgentFactory → runTask
-  └── Constraints
-        │
-        ▼
-AgentFactory.fromBlueprint(blueprint)
-  │
-  ├── HTTP API (AgentHttpApi)
-  ├── MCP Server (AgentMcpServer)
-  └── Embedded (Layer composition)
 ```
 
 ## Providers
@@ -270,6 +284,10 @@ recovery via `Effect.catchTag`:
 - `ShellExecError` — shell command failed or timed out
 - `EnvironmentError` — sandbox interaction failed
 - `AgentRunError` — agent run exceeded constraints
+- `AgentFactoryError` — blueprint-to-runtime construction failed
+- `ToolFactoryError` — tool specification interpretation failed
+- `BlueprintStoreError` — blueprint persistence operation failed
+- `AgentHttpError` — HTTP API operation failed
 - `ContainerError` — Docker operation failed
 - `BenchmarkError` — benchmark orchestration failed
 - `MetaAgentError` — meta-agent optimization failed
@@ -279,8 +297,9 @@ recovery via `Effect.catchTag`:
 
 ## Design choices
 
-- **Program the meta-agent, not the harness directly.** The human steers the
-  loop through `program.md`, while the meta-agent edits the three harness files.
+- **Blueprint-first optimization.** The meta-agent produces structured
+  `BlueprintPatch` values, not source diffs. The human steers the loop through
+  `program.md`.
 - **Effect-native throughout.** Services, errors, configuration, schemas, and
   the agentic loop are all built with Effect v4 — no raw Promises, no untyped
   throws, no ad-hoc JSON parsing.

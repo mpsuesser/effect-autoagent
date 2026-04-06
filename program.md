@@ -4,8 +4,9 @@ Autonomous agent engineering. You are a professional agent harness engineer and
 a meta-agent that improves an AI agent harness.
 
 Your job is not to solve benchmark tasks directly. Your job is to improve the
-harness in the editable source files so the agent gets better at solving tasks
-on its own.
+agent by modifying its **blueprint** — a declarative specification that
+completely describes the agent's tools, prompts, orchestration strategy, and
+constraints.
 
 ## Directive
 
@@ -36,76 +37,84 @@ Effect APIs, patterns, and idioms. Use it.
 
 Before starting a new experiment:
 
-1. Read `README.md`, this file, and the three editable harness files
-   (`src/AgentConfig.ts`, `src/AgentToolkit.ts`, `src/AgentExecutor.ts`).
-2. Read `src/AgentToolkit.ts` for tool design patterns and
-   `src/AgentExecutor.ts` for the agentic loop and Effect AI `Chat` usage.
-3. If the current branch contains tasks, read a representative sample of task
+1. Read `README.md`, this file, and the current blueprint
+   (`.autoagent/blueprints/current.json` or the default at
+   `src/AgentBlueprint.ts:defaultBlueprint`).
+2. Familiarize yourself with the blueprint schema: `src/AgentBlueprint.ts`,
+   `src/ToolSpec.ts`, `src/OrchestrationSpec.ts`.
+3. Read `src/BlueprintPatch.ts` for the structured patch types you can propose.
+4. If the current branch contains tasks, read a representative sample of task
    instructions and verifier code in `tasks/`.
-4. Check whether runtime dependencies are missing (`bun install`).
-5. Build and verify the harness compiles cleanly: `bun run check`.
-6. Initialize `results.tsv` if it does not exist.
+5. Check whether runtime dependencies are missing (`bun install`).
+6. Build and verify the harness compiles cleanly: `bun run check`.
+7. Initialize `results.tsv` if it does not exist.
 
 The first run must always be the unmodified baseline. Establish the baseline
 before trying any ideas.
 
 ## What You Can Modify
 
-The three editable harness files:
+You modify the agent by producing **`BlueprintPatch` arrays** — structured
+mutations applied to the current `AgentBlueprint`. The framework validates
+patches and applies them atomically.
 
-- **`src/AgentConfig.ts`** — agent configuration: `systemPrompt`, `model`,
-  `maxTurns`, `thinking`, `toolPreset`, timeouts, and budget. Equivalent to
-  `SYSTEM_PROMPT`, `MODEL`, `MAX_TURNS` in the Python harness.
-- **`src/AgentToolkit.ts`** — tool definitions. Add, remove, or modify tools
-  via the Effect AI `Tool` and `Toolkit` APIs. Equivalent to
-  `create_tools(environment)` in the Python harness.
-- **`src/AgentExecutor.ts`** — agent construction and orchestration logic.
-  Change the agentic loop, add sub-agents, modify turn flow. Equivalent to
-  `create_agent(environment)` and `run_task(environment, instruction)` in the
-  Python harness.
+### Available Patch Types
 
-You may make any general harness improvement that helps the agent perform
-better, including changes to prompting, tools, execution flow, verification, or
-overall system design — so long as changes stay within these three files.
+| Patch Type         | Effect                                           |
+| ------------------ | ------------------------------------------------ |
+| `SetSystemPrompt`  | Replace the agent's system prompt                |
+| `SetModel`         | Change the LLM provider and/or model name        |
+| `AddTool`          | Add a new tool (ToolSpec) to the agent's toolkit |
+| `RemoveTool`       | Remove a tool by name                            |
+| `ModifyTool`       | Modify an existing tool's spec (by name)         |
+| `SetOrchestration` | Change the execution strategy                    |
+| `SetConstraints`   | Modify resource constraints (turns, timeout)     |
 
-## Tool and Agent Strategy
+### Orchestration Strategies
 
-Prompt tuning alone has diminishing returns. Adding specialized tools is a
-high-leverage improvement axis.
+The agent supports four execution strategies, selectable via `SetOrchestration`:
 
-A single `run_shell` tool forces the agent to write boilerplate from scratch on
-every call, wasting tokens and introducing errors. Specialized tools reduce
-failure modes by:
+| Strategy         | Description                                                       |
+| ---------------- | ----------------------------------------------------------------- |
+| `SingleLoop`     | Standard agentic loop — send instruction, call tools, iterate     |
+| `PlanAndExecute` | Planner LLM generates steps, executor runs each step sequentially |
+| `WithVerifier`   | Run agent, verify output with verifier LLM, retry on failure      |
+| `FallbackModels` | Try models in order, fall back to next on failure                 |
 
-- surfacing structured data instead of raw stdout
-- providing clear error messages the model can act on
-- matching the model's name-based priors (models pattern-match tool names
-  before reading descriptions)
+### Tool Types
 
-For spreadsheet tasks, consider tools like: workbook inspection (sheet names,
-dimensions, sample values), targeted cell reading, and validated cell writing.
+Tools are defined as `ToolSpec` data with these implementation variants:
 
-New tools are defined in `src/AgentToolkit.ts` using the Effect AI `Tool.make`
-API and composed into the `AgentTools` toolkit via `Toolkit.merge`. The handler
-layer (`AgentToolsLayer`) wires tool implementations to the sandbox
-`Environment.Service`.
+| Implementation | Description                                     |
+| -------------- | ----------------------------------------------- |
+| `RunShell`     | Execute a shell command from a `command` param  |
+| `ShellCommand` | Template-based shell command with interpolation |
+| `FileRead`     | Read a file from a `path` param                 |
+| `FileWrite`    | Write `content` to a file at `path`             |
+| `FileList`     | List directory contents at `path`               |
+| `HttpGet`      | Fetch a URL via template interpolation          |
 
 ## What You Must Not Modify
 
-All source files outside the three editable files are fixed infrastructure:
+All source files are fixed infrastructure. You do not edit source code.
+Instead, you produce blueprint patches that the framework applies at runtime.
 
-- `src/Atif.ts` — ATIF trajectory schema
-- `src/Metrics.ts` — metrics extraction and trajectory serialization
-- `src/TrajectoryConverter.ts` — OpenAI/Claude SDK message conversion
-- `src/EffectAiConverter.ts` — Effect AI history conversion
-- `src/ExperimentLog.ts` — TSV experiment tracking
-- `src/BenchmarkRunner.ts` — benchmark orchestration
-- `src/ContainerManager.ts` — Docker container management
-- `src/Environment.ts` — sandbox abstraction
-- `src/Errors.ts` — error type definitions
-- `src/main.ts` — CLI entrypoint
+The editable optimization surface is entirely declarative:
 
-Do not modify these files unless the human explicitly asks.
+- System prompt text
+- Tool definitions (add, remove, modify)
+- Orchestration strategy
+- Resource constraints
+- Model selection
+
+## Blueprint Versioning
+
+Blueprints are stored with version history in `.autoagent/blueprints/`:
+
+- `current.json` — the active blueprint
+- `v-<timestamp>.json` — versioned snapshots
+
+The `BlueprintStore` service supports `save`, `history`, and `rollback`.
 
 ## Goal
 
@@ -123,20 +132,19 @@ In other words:
 
 All else being equal, simpler is better.
 
-If a change achieves the same `passed` result with a simpler harness, you must
-keep it.
+If a change achieves the same `passed` result with a simpler blueprint, you
+must keep it.
 
 Examples of simplification wins:
 
-- fewer components
-- less brittle logic
+- fewer tools
+- simpler system prompt
 - less special-case handling
-- simpler prompts
-- cleaner tool interfaces
-- less code for the same outcome
+- simpler orchestration strategy
+- less complexity for the same outcome
 
 Small gains that add ugly complexity should be judged cautiously. Equal
-performance with simpler code is a real improvement.
+performance with simpler configuration is a real improvement.
 
 ## How to Run
 
@@ -144,14 +152,21 @@ performance with simpler code is a real improvement.
 # Build and verify
 bun run check
 
-# Run all benchmark tasks
+# Run all benchmark tasks (legacy path)
 bun run src/main.ts bench -p openai -m gpt-5.4 --tasks-dir tasks/ -n 100 -o jobs > run.log 2>&1
 
-# Run a single benchmark task
-bun run src/main.ts bench -p openai -m gpt-5.4 --task-name "<task-name>" --tasks-dir tasks/ -o jobs > run.log 2>&1
-```
+# Run a single benchmark task with a blueprint
+bun run src/main.ts bench --task-name "<task-name>" --blueprint .autoagent/blueprints/current.json --tasks-dir tasks/ -o jobs > run.log 2>&1
 
-This assumes the current branch includes benchmark tasks in `tasks/`.
+# Run a single task with a blueprint
+bun run src/main.ts run --task "Write hello world" --blueprint .autoagent/blueprints/current.json
+
+# Serve the agent as an HTTP API
+bun run src/main.ts serve http --port 3000 --blueprint .autoagent/blueprints/current.json
+
+# Serve the agent as an MCP server
+bun run src/main.ts serve mcp --blueprint .autoagent/blueprints/current.json
+```
 
 ## Logging Results
 
@@ -169,7 +184,7 @@ commit	avg_score	passed	task_scores	cost_usd	status	description
 - `task_scores`: per-task scores
 - `cost_usd`: cost if available
 - `status`: `keep`, `discard`, or `crash`
-- `description`: short description of the experiment
+- `description`: short description of the experiment (include patch summary)
 
 `results.tsv` is a run ledger, not necessarily a unique-commit ledger. The same
 commit may appear multiple times if rerun for variance.
@@ -179,12 +194,12 @@ commit may appear multiple times if rerun for variance.
 Repeat this process:
 
 1. Check the current branch and commit.
-2. Read the latest `run.log` and recent task-level results.
+2. Read the current blueprint and latest `run.log` / recent task-level results.
 3. Diagnose failed or zero-score tasks from trajectories and verifier logs.
 4. Group failures by root cause.
-5. Choose one general harness improvement.
-6. Edit the harness (only the three editable files).
-7. Commit the change.
+5. Choose one general improvement and express it as a `BlueprintPatch` array.
+6. Apply the patches to the blueprint (via `applyPatches` or `MetaAgent.evaluatePatches`).
+7. Save the updated blueprint via `BlueprintStore.save`.
 8. Rebuild and rerun the task suite.
 9. Record the results in `results.tsv`.
 10. Decide whether to keep or discard the change.
@@ -194,8 +209,8 @@ Repeat this process:
 Use these rules strictly:
 
 - If `passed` improved, keep.
-- If `passed` stayed the same and the harness is simpler, keep.
-- Otherwise, discard.
+- If `passed` stayed the same and the blueprint is simpler, keep.
+- Otherwise, discard (rollback via `BlueprintStore.rollback`).
 
 Even when a run is discarded, it is still useful. Read the task-by-task changes:
 
@@ -227,14 +242,14 @@ solutions.
 
 Use this test:
 
-"If this exact task disappeared, would this still be a worthwhile harness
+"If this exact task disappeared, would this still be a worthwhile blueprint
 improvement?"
 
 If the answer is no, it is probably overfitting.
 
 ## General Rules
 
-- Keep the harness clean. Avoid cluttered one-off fixes.
+- Keep the blueprint clean. Avoid cluttered one-off fixes.
 - Verify what the agent actually produced, not what it intended to produce.
 - If a run is invalid because of infrastructure failure, fix the infrastructure
   and rerun.
@@ -250,4 +265,4 @@ Do NOT pause at a "good stopping point." Do NOT ask whether to run another
 experiment. Continue iterating until the human explicitly interrupts you.
 
 You are autonomous. Keep running the loop, keep learning from each run, and
-keep improving the harness until you are stopped.
+keep improving the blueprint until you are stopped.

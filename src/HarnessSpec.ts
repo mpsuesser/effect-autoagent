@@ -10,6 +10,8 @@
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 
+import { BlueprintPatch } from './BlueprintPatch.js';
+
 // =============================================================================
 // Keep / Discard Decision
 // =============================================================================
@@ -242,5 +244,43 @@ export class DiagnosisOutput extends Schema.Class<DiagnosisOutput>(
 	},
 	{
 		description: 'Structured output from the meta-agent diagnosis phase.'
+	}
+) {}
+
+// =============================================================================
+// Blueprint-Aware Improvement Proposal
+// =============================================================================
+
+/**
+ * A proposed improvement expressed as blueprint patches.
+ *
+ * @since 0.3.0
+ */
+export class BlueprintProposal extends Schema.Class<BlueprintProposal>(
+	'BlueprintProposal'
+)(
+	{
+		description: Schema.String,
+		rationale: Schema.String,
+		patches: Schema.Array(BlueprintPatch)
+	},
+	{ description: 'A proposed improvement expressed as blueprint patches.' }
+) {}
+
+/**
+ * Structured output from blueprint-aware diagnosis.
+ *
+ * @since 0.3.0
+ */
+export class BlueprintDiagnosisOutput extends Schema.Class<BlueprintDiagnosisOutput>(
+	'BlueprintDiagnosisOutput'
+)(
+	{
+		diagnoses: Schema.Array(FailureDiagnosis),
+		proposal: BlueprintProposal
+	},
+	{
+		description:
+			'Structured output from blueprint-aware meta-agent diagnosis.'
 	}
 ) {}

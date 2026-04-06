@@ -1,7 +1,10 @@
 import { describe, expect, it } from '@effect/vitest';
 import * as Option from 'effect/Option';
 
+import { SetSystemPrompt } from '../src/BlueprintPatch.js';
 import {
+	BlueprintDiagnosisOutput,
+	BlueprintProposal,
 	DiagnosisOutput,
 	EvaluationResult,
 	FailureDiagnosis,
@@ -175,6 +178,75 @@ describe('HarnessSpec', () => {
 			});
 			expect(output.diagnoses).toHaveLength(1);
 			expect(output.proposal.changeType).toBe('new_tool');
+		});
+	});
+
+	describe('BlueprintProposal', () => {
+		it('constructs with patches', () => {
+			const proposal = new BlueprintProposal({
+				description: 'Improve system prompt',
+				rationale: 'Better task understanding',
+				patches: [
+					new SetSystemPrompt({
+						prompt: 'You are an improved agent'
+					})
+				]
+			});
+			expect(proposal.description).toBe('Improve system prompt');
+			expect(proposal.rationale).toBe('Better task understanding');
+			expect(proposal.patches).toHaveLength(1);
+		});
+
+		it('constructs with empty patches', () => {
+			const proposal = new BlueprintProposal({
+				description: 'No-op proposal',
+				rationale: 'Testing',
+				patches: []
+			});
+			expect(proposal.patches).toHaveLength(0);
+		});
+	});
+
+	describe('BlueprintDiagnosisOutput', () => {
+		it('constructs with diagnoses and proposal', () => {
+			const output = new BlueprintDiagnosisOutput({
+				diagnoses: [
+					new FailureDiagnosis({
+						category: 'bad_execution_strategy',
+						taskNames: ['task-1', 'task-2'],
+						description: 'Agent gets stuck in loops',
+						suggestedFix: 'Improve system prompt'
+					})
+				],
+				proposal: new BlueprintProposal({
+					description: 'Update system prompt',
+					rationale: 'Reduce looping behavior',
+					patches: [
+						new SetSystemPrompt({
+							prompt: 'You are a focused agent'
+						})
+					]
+				})
+			});
+			expect(output.diagnoses).toHaveLength(1);
+			expect(output.diagnoses[0]?.category).toBe(
+				'bad_execution_strategy'
+			);
+			expect(output.proposal).toBeInstanceOf(BlueprintProposal);
+			expect(output.proposal.patches).toHaveLength(1);
+		});
+
+		it('constructs with empty diagnoses', () => {
+			const output = new BlueprintDiagnosisOutput({
+				diagnoses: [],
+				proposal: new BlueprintProposal({
+					description: 'Proactive improvement',
+					rationale: 'Preemptive fix',
+					patches: []
+				})
+			});
+			expect(output.diagnoses).toHaveLength(0);
+			expect(output.proposal.description).toBe('Proactive improvement');
 		});
 	});
 });

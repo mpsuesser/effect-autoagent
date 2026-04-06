@@ -20,6 +20,13 @@ import * as Str from 'effect/String';
 import * as LanguageModel from 'effect/unstable/ai/LanguageModel';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
+import {
+	AgentBlueprint,
+	BlueprintJson,
+	defaultBlueprint
+} from './AgentBlueprint.js';
+import { type BlueprintPatch, applyPatches } from './BlueprintPatch.js';
+import { BlueprintStore } from './BlueprintStore.js';
 import { BenchmarkRunner } from './BenchmarkRunner.js';
 import { MetaAgentError } from './Errors.js';
 import {
@@ -28,6 +35,8 @@ import {
 	type ExperimentStatus
 } from './ExperimentLog.js';
 import {
+	BlueprintDiagnosisOutput,
+	BlueprintProposal,
 	DiagnosisOutput,
 	EvaluationResult,
 	type HarnessFile,
@@ -110,6 +119,36 @@ export namespace MetaAgent {
 		 * @since 0.2.0
 		 */
 		readonly state: Effect.Effect<OptimizerState, never>;
+
+		/**
+		 * Diagnose failures and propose blueprint patches.
+		 *
+		 * @since 0.3.0
+		 */
+		readonly diagnoseBlueprint: Effect.Effect<
+			BlueprintDiagnosisOutput,
+			MetaAgentError
+		>;
+
+		/**
+		 * Apply blueprint patches, benchmark, evaluate, and keep/rollback.
+		 *
+		 * @since 0.3.0
+		 */
+		readonly evaluatePatches: (
+			patches: ReadonlyArray<BlueprintPatch>,
+			description: string
+		) => Effect.Effect<EvaluationResult, MetaAgentError>;
+
+		/**
+		 * Get the current blueprint from the store.
+		 *
+		 * @since 0.3.0
+		 */
+		readonly currentBlueprint: Effect.Effect<
+			AgentBlueprint,
+			MetaAgentError
+		>;
 	}
 
 	export class Service extends ServiceMap.Service<Service, Interface>()(
@@ -125,6 +164,9 @@ export namespace MetaAgent {
 			const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 			const fs = yield* FileSystem.FileSystem;
 			const stateRef = yield* Ref.make(initialOptimizerState);
+			const blueprintStore = yield* Effect.serviceOption(
+				BlueprintStore.Service
+			);
 
 			const wrapError = (phase: string) => (cause: unknown) =>
 				new MetaAgentError({
@@ -425,6 +467,207 @@ ${runLog}
 			);
 
 			// =================================================================
+			// Blueprint-aware methods
+			// =================================================================
+
+			const requireBlueprintStore = (phase: string) =>
+				Effect.fromOption(blueprintStore).pipe(
+					Effect.mapError(
+						() =>
+							new MetaAgentError({
+								phase,
+								message: 'BlueprintStore not provided'
+							})
+					)
+				);
+
+			const diagnoseBlueprint: Effect.Effect<
+				BlueprintDiagnosisOutput,
+				MetaAgentError
+			> = Effect.gen(function* () {
+				const store = yield* requireBlueprintStore('diagnoseBlueprint');
+				const currentBp = yield* store.current.pipe(
+					Effect.mapError(wrapError('diagnoseBlueprint'))
+				);
+				const history = yield* experimentLog.readAll.pipe(
+					Effect.mapError(wrapError('readHistory'))
+				);
+				const runLog = yield* readRunLog;
+
+				const historyStr = Arr.match(history, {
+					onEmpty: () => '(no previous runs)',
+					onNonEmpty: (rows) =>
+						Arr.map(
+							rows,
+							(r) =>
+								`${r.commit}\t${r.avgScore}\t${r.passed}\t${r.status}\t${r.description}`
+						).join('\n')
+				});
+
+				const blueprintStr =
+					Schema.encodeSync(BlueprintJson)(currentBp);
+
+				const diagPrompt = `You are a meta-agent optimizer. Analyze the benchmark history and current blueprint to diagnose failures and propose improvements as blueprint patches.
+
+## Current Blueprint
+${blueprintStr}
+
+## Experiment History
+${historyStr}
+
+## Latest Run Log (tail)
+${runLog}
+
+## Instructions
+1. Group failures by root cause category
+2. Propose ONE improvement as an array of BlueprintPatch operations
+3. Available patch types: SetSystemPrompt, SetModel, AddTool, RemoveTool, ModifyTool, SetOrchestration, SetConstraints
+4. The improvement should help multiple tasks, not just one`;
+
+				const response = yield* lm
+					.generateObject({
+						prompt: diagPrompt,
+						schema: BlueprintDiagnosisOutput
+					})
+					.pipe(Effect.mapError(wrapError('diagnoseBlueprint')));
+
+				return response.value;
+			}).pipe(Effect.withLogSpan('MetaAgent.diagnoseBlueprint'));
+
+			const evaluatePatches = Effect.fn('MetaAgent.evaluatePatches')(
+				function* (
+					patches: ReadonlyArray<BlueprintPatch>,
+					description: string
+				) {
+					const store =
+						yield* requireBlueprintStore('evaluatePatches');
+					const currentState = yield* Ref.get(stateRef);
+					const currentBp = yield* store.current.pipe(
+						Effect.mapError(wrapError('evaluatePatches'))
+					);
+
+					// Apply patches
+					const newBp = applyPatches(currentBp, patches);
+
+					// Save new blueprint
+					yield* store
+						.save(newBp)
+						.pipe(Effect.mapError(wrapError('evaluatePatches')));
+
+					// Run benchmarks
+					yield* Effect.logInfo(
+						'Running benchmarks with patched blueprint...'
+					);
+					const benchResult = yield* benchmarkRunner
+						.runAll()
+						.pipe(Effect.mapError(wrapError('benchmark')));
+					yield* Effect.logInfo(
+						`Benchmark complete: ${benchResult.passed} passed`
+					);
+
+					// Record results
+					const history = yield* experimentLog.readAll.pipe(
+						Effect.mapError(wrapError('readHistory'))
+					);
+					const baseline = Arr.last(history);
+					const commit = yield* getCurrentCommit;
+
+					const newRow = new ExperimentRow({
+						commit,
+						avgScore: benchResult.avgScore,
+						passed: benchResult.passed,
+						taskScores: '',
+						costUsd: Option.none(),
+						status: 'keep' satisfies ExperimentStatus,
+						description
+					});
+
+					// Evaluate
+					const evalResult = yield* evaluateBenchmark(
+						baseline,
+						newRow
+					);
+					const finalStatus: ExperimentStatus =
+						evalResult.decision === 'keep' ? 'keep' : 'discard';
+
+					const recordedRow = new ExperimentRow({
+						commit,
+						avgScore: newRow.avgScore,
+						passed: newRow.passed,
+						taskScores: '',
+						costUsd: Option.none(),
+						status: finalStatus,
+						description
+					});
+
+					yield* experimentLog
+						.append(recordedRow)
+						.pipe(Effect.mapError(wrapError('recordResult')));
+
+					// Update state
+					const passedCount = parsePassed(recordedRow.passed);
+					const nextState = new OptimizerState({
+						iteration: currentState.iteration + 1,
+						bestScore:
+							evalResult.decision === 'keep'
+								? Math.max(
+										currentState.bestScore,
+										recordedRow.avgScore
+									)
+								: currentState.bestScore,
+						bestPassed:
+							evalResult.decision === 'keep' &&
+							passedCount > parsePassed(currentState.bestPassed)
+								? recordedRow.passed
+								: currentState.bestPassed,
+						consecutiveDiscards:
+							evalResult.decision === 'discard'
+								? currentState.consecutiveDiscards + 1
+								: 0,
+						totalKeeps:
+							evalResult.decision === 'keep'
+								? currentState.totalKeeps + 1
+								: currentState.totalKeeps,
+						totalDiscards:
+							evalResult.decision === 'discard'
+								? currentState.totalDiscards + 1
+								: currentState.totalDiscards
+					});
+					yield* Ref.set(stateRef, nextState);
+
+					// If discarded, rollback blueprint
+					if (evalResult.decision === 'discard') {
+						yield* store
+							.save(currentBp)
+							.pipe(Effect.mapError(wrapError('rollback')));
+						yield* Effect.logInfo(
+							'Discarded — rolled back blueprint'
+						);
+					} else {
+						yield* Effect.logInfo(`Kept — ${evalResult.reasoning}`);
+					}
+
+					return new EvaluationResult({
+						decision: evalResult.decision,
+						baselinePassed: evalResult.baselinePassed,
+						currentPassed: evalResult.currentPassed,
+						reasoning: evalResult.reasoning,
+						commit: Option.some(commit)
+					});
+				}
+			);
+
+			const currentBlueprint: Effect.Effect<
+				AgentBlueprint,
+				MetaAgentError
+			> = Effect.gen(function* () {
+				const store = yield* requireBlueprintStore('currentBlueprint');
+				return yield* store.current.pipe(
+					Effect.mapError(wrapError('currentBlueprint'))
+				);
+			});
+
+			// =================================================================
 			// Convenience methods (primarily for testing)
 			// =================================================================
 
@@ -460,7 +703,10 @@ ${runLog}
 				recordAndEvaluate,
 				step,
 				loop,
-				state
+				state,
+				diagnoseBlueprint,
+				evaluatePatches,
+				currentBlueprint
 			});
 		})
 	);
@@ -475,6 +721,12 @@ ${runLog}
 		readonly diagnose?: () => DiagnosisOutput;
 		readonly readHarness?: () => ReadonlyArray<HarnessFile>;
 		readonly recordAndEvaluate?: (description: string) => EvaluationResult;
+		readonly diagnoseBlueprint?: () => BlueprintDiagnosisOutput;
+		readonly evaluatePatches?: (
+			patches: ReadonlyArray<BlueprintPatch>,
+			description: string
+		) => EvaluationResult;
+		readonly currentBlueprint?: () => AgentBlueprint;
 	}) => {
 		const defaultResult = new EvaluationResult({
 			decision: 'keep',
@@ -510,7 +762,30 @@ ${runLog}
 					),
 				step: Effect.sync(() => responses?.step?.() ?? defaultResult),
 				loop: Effect.never,
-				state: Effect.succeed(initialOptimizerState)
+				state: Effect.succeed(initialOptimizerState),
+				diagnoseBlueprint: Effect.sync(
+					() =>
+						responses?.diagnoseBlueprint?.() ??
+						new BlueprintDiagnosisOutput({
+							diagnoses: [],
+							proposal: new BlueprintProposal({
+								description: 'mock blueprint proposal',
+								rationale: 'mock',
+								patches: []
+							})
+						})
+				),
+				evaluatePatches: (patches, description) =>
+					Effect.sync(
+						() =>
+							responses?.evaluatePatches?.(
+								patches,
+								description
+							) ?? defaultResult
+					),
+				currentBlueprint: Effect.sync(
+					() => responses?.currentBlueprint?.() ?? defaultBlueprint
+				)
 			})
 		);
 	};

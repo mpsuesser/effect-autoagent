@@ -1,7 +1,11 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 
+import { defaultBlueprint } from '../src/AgentBlueprint.js';
+import { SetSystemPrompt } from '../src/BlueprintPatch.js';
 import {
+	BlueprintDiagnosisOutput,
+	BlueprintProposal,
 	DiagnosisOutput,
 	EvaluationResult,
 	FailureDiagnosis,
@@ -150,6 +154,101 @@ describe('MetaAgent', () => {
 					})
 				)
 			)
+		);
+
+		it.effect('diagnoseBlueprint returns mock output', () =>
+			Effect.gen(function* () {
+				const agent = yield* MetaAgent.Service;
+				const result = yield* agent.diagnoseBlueprint;
+				expect(result).toBeInstanceOf(BlueprintDiagnosisOutput);
+				expect(result.proposal).toBeInstanceOf(BlueprintProposal);
+				expect(result.proposal.patches).toHaveLength(0);
+				expect(result.proposal.description).toBe(
+					'mock blueprint proposal'
+				);
+			}).pipe(Effect.provide(MetaAgent.test()))
+		);
+
+		it.effect('diagnoseBlueprint uses custom handler', () =>
+			Effect.gen(function* () {
+				const agent = yield* MetaAgent.Service;
+				const result = yield* agent.diagnoseBlueprint;
+				expect(result.diagnoses).toHaveLength(1);
+				expect(result.proposal.patches).toHaveLength(1);
+			}).pipe(
+				Effect.provide(
+					MetaAgent.test({
+						diagnoseBlueprint: () =>
+							new BlueprintDiagnosisOutput({
+								diagnoses: [
+									new FailureDiagnosis({
+										category: 'missing_capability',
+										taskNames: ['task-1'],
+										description: 'Missing tool',
+										suggestedFix: 'Add tool'
+									})
+								],
+								proposal: new BlueprintProposal({
+									description: 'Update prompt',
+									rationale: 'Better results',
+									patches: [
+										new SetSystemPrompt({
+											prompt: 'Improved prompt'
+										})
+									]
+								})
+							})
+					})
+				)
+			)
+		);
+
+		it.effect('evaluatePatches returns mock result', () =>
+			Effect.gen(function* () {
+				const agent = yield* MetaAgent.Service;
+				const patches = [new SetSystemPrompt({ prompt: 'New prompt' })];
+				const result = yield* agent.evaluatePatches(
+					patches,
+					'test patch'
+				);
+				expect(result).toBeInstanceOf(EvaluationResult);
+				expect(result.decision).toBe('keep');
+			}).pipe(Effect.provide(MetaAgent.test()))
+		);
+
+		it.effect('evaluatePatches uses custom handler', () =>
+			Effect.gen(function* () {
+				const agent = yield* MetaAgent.Service;
+				const patches = [new SetSystemPrompt({ prompt: 'New prompt' })];
+				const result = yield* agent.evaluatePatches(
+					patches,
+					'custom patch'
+				);
+				expect(result.decision).toBe('discard');
+				expect(result.reasoning).toBe('patch regression');
+			}).pipe(
+				Effect.provide(
+					MetaAgent.test({
+						evaluatePatches: () =>
+							new EvaluationResult({
+								decision: 'discard',
+								baselinePassed: '5/10',
+								currentPassed: '3/10',
+								reasoning: 'patch regression'
+							})
+					})
+				)
+			)
+		);
+
+		it.effect('currentBlueprint returns defaultBlueprint', () =>
+			Effect.gen(function* () {
+				const agent = yield* MetaAgent.Service;
+				const bp = yield* agent.currentBlueprint;
+				expect(bp.name).toBe(defaultBlueprint.name);
+				expect(bp.version).toBe(defaultBlueprint.version);
+				expect(bp.systemPrompt).toBe(defaultBlueprint.systemPrompt);
+			}).pipe(Effect.provide(MetaAgent.test()))
 		);
 	});
 });

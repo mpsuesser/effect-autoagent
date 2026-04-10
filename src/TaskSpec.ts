@@ -29,8 +29,8 @@ export class TaskMeta extends Schema.Class<TaskMeta>('TaskMeta')(
 	{
 		name: Schema.String,
 		description: Schema.String.pipe(
-			Schema.withDecodingDefault(() => ''),
-			Schema.withConstructorDefault(() => Option.some(''))
+			Schema.withDecodingDefault(Effect.succeed('')),
+			Schema.withConstructorDefault(Effect.succeed(''))
 		)
 	},
 	{
@@ -47,8 +47,8 @@ export class TaskMeta extends Schema.Class<TaskMeta>('TaskMeta')(
 export class AgentSettings extends Schema.Class<AgentSettings>('AgentSettings')(
 	{
 		timeout_sec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 120),
-			Schema.withConstructorDefault(() => Option.some(120))
+			Schema.withDecodingDefault(Effect.succeed(120)),
+			Schema.withConstructorDefault(Effect.succeed(120))
 		)
 	},
 	{ description: 'Agent execution settings from task.toml [agent] section.' }
@@ -64,8 +64,8 @@ export class VerifierSettings extends Schema.Class<VerifierSettings>(
 )(
 	{
 		timeout_sec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 600),
-			Schema.withConstructorDefault(() => Option.some(600))
+			Schema.withDecodingDefault(Effect.succeed(600)),
+			Schema.withConstructorDefault(Effect.succeed(600))
 		)
 	},
 	{ description: 'Verifier settings from task.toml [verifier] section.' }
@@ -81,20 +81,20 @@ export class EnvironmentSettings extends Schema.Class<EnvironmentSettings>(
 )(
 	{
 		build_timeout_sec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 600),
-			Schema.withConstructorDefault(() => Option.some(600))
+			Schema.withDecodingDefault(Effect.succeed(600)),
+			Schema.withConstructorDefault(Effect.succeed(600))
 		),
 		cpus: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 1),
-			Schema.withConstructorDefault(() => Option.some(1))
+			Schema.withDecodingDefault(Effect.succeed(1)),
+			Schema.withConstructorDefault(Effect.succeed(1))
 		),
 		memory_mb: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 2048),
-			Schema.withConstructorDefault(() => Option.some(2048))
+			Schema.withDecodingDefault(Effect.succeed(2048)),
+			Schema.withConstructorDefault(Effect.succeed(2048))
 		),
 		allow_internet: Schema.Boolean.pipe(
-			Schema.withDecodingDefault(() => true),
-			Schema.withConstructorDefault(() => Option.some(true))
+			Schema.withDecodingDefault(Effect.succeed(true)),
+			Schema.withConstructorDefault(Effect.succeed(true))
 		)
 	},
 	{
@@ -111,26 +111,28 @@ export class EnvironmentSettings extends Schema.Class<EnvironmentSettings>(
 export class TaskConfig extends Schema.Class<TaskConfig>('TaskConfig')(
 	{
 		schema_version: Schema.String.pipe(
-			Schema.withDecodingDefault(() => '1.1'),
-			Schema.withConstructorDefault(() => Option.some('1.1'))
+			Schema.withDecodingDefault(Effect.succeed('1.1')),
+			Schema.withConstructorDefault(Effect.succeed('1.1'))
 		),
 		task: TaskMeta,
 		agent: AgentSettings.pipe(
-			Schema.withDecodingDefault(() => new AgentSettings({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new AgentSettings({}))
-			)
+			Schema.withDecodingDefault(Effect.succeed(new AgentSettings({}))),
+			Schema.withConstructorDefault(Effect.succeed(new AgentSettings({})))
 		),
 		verifier: VerifierSettings.pipe(
-			Schema.withDecodingDefault(() => new VerifierSettings({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new VerifierSettings({}))
+			Schema.withDecodingDefault(
+				Effect.succeed(new VerifierSettings({}))
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed(new VerifierSettings({}))
 			)
 		),
 		environment: EnvironmentSettings.pipe(
-			Schema.withDecodingDefault(() => new EnvironmentSettings({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new EnvironmentSettings({}))
+			Schema.withDecodingDefault(
+				Effect.succeed(new EnvironmentSettings({}))
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed(new EnvironmentSettings({}))
 			)
 		)
 	},
@@ -152,7 +154,7 @@ export class TaskSpec extends Schema.Class<TaskSpec>('TaskSpec')(
 		instruction: Schema.String,
 		taskDir: Schema.String,
 		dockerfilePath: Schema.OptionFromOptionalKey(Schema.String).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		),
 		testScripts: Schema.Array(Schema.String)
 	},

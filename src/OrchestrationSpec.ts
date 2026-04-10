@@ -9,8 +9,7 @@
  *
  * @since 0.3.0
  */
-import { Match } from 'effect';
-import * as Option from 'effect/Option';
+import { Effect, Match } from 'effect';
 import * as Schema from 'effect/Schema';
 
 // =============================================================================
@@ -52,8 +51,8 @@ export class PlanAndExecute extends Schema.TaggedClass<PlanAndExecute>()(
 	{
 		plannerPrompt: Schema.String,
 		maxPlanSteps: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 10),
-			Schema.withConstructorDefault(() => Option.some(10))
+			Schema.withDecodingDefault(Effect.succeed(10)),
+			Schema.withConstructorDefault(Effect.succeed(10))
 		)
 	},
 	{
@@ -79,8 +78,8 @@ export class WithVerifier extends Schema.TaggedClass<WithVerifier>()(
 	{
 		verifierPrompt: Schema.String,
 		maxRetries: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 2),
-			Schema.withConstructorDefault(() => Option.some(2))
+			Schema.withDecodingDefault(Effect.succeed(2)),
+			Schema.withConstructorDefault(Effect.succeed(2))
 		)
 	},
 	{

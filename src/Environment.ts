@@ -8,7 +8,7 @@
  *
  * @since 0.1.0
  */
-import { Clock, Effect, FileSystem, Layer, ServiceMap } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
@@ -58,7 +58,7 @@ export namespace Environment {
 		readonly mkdir: (path: string) => Effect.Effect<void, EnvironmentError>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/Environment'
 	) {}
 

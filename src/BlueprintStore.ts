@@ -6,7 +6,7 @@
  *
  * @since 0.3.0
  */
-import { Clock, Effect, FileSystem, Layer, Order, ServiceMap } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Order } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Schema from 'effect/Schema';
 
@@ -109,7 +109,7 @@ export namespace BlueprintStore {
 	 *
 	 * @since 0.3.0
 	 */
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/BlueprintStore'
 	) {}
 

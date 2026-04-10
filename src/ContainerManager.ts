@@ -7,7 +7,7 @@
  *
  * @since 0.2.0
  */
-import { Effect, Layer, ServiceMap } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import * as Option from 'effect/Option';
 import * as R from 'effect/Record';
 import * as Schema from 'effect/Schema';
@@ -93,7 +93,7 @@ export namespace ContainerManager {
 		) => Effect.Effect<void, ContainerError>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/ContainerManager'
 	) {}
 

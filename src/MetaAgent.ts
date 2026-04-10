@@ -12,7 +12,7 @@
  *
  * @since 0.2.0
  */
-import { Effect, FileSystem, Layer, Ref, ServiceMap } from 'effect';
+import { Context, Effect, FileSystem, Layer, Ref } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -151,7 +151,7 @@ export namespace MetaAgent {
 		>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/MetaAgent'
 	) {}
 
@@ -504,8 +504,9 @@ ${runLog}
 						).join('\n')
 				});
 
-				const blueprintStr =
-					Schema.encodeSync(BlueprintJson)(currentBp);
+				const blueprintStr = yield* Schema.encodeEffect(BlueprintJson)(
+					currentBp
+				).pipe(Effect.mapError(wrapError('diagnoseBlueprint')));
 
 				const diagPrompt = `You are a meta-agent optimizer. Analyze the benchmark history and current blueprint to diagnose failures and propose improvements as blueprint patches.
 

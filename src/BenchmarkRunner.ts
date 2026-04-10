@@ -12,7 +12,7 @@
  *
  * @since 0.3.0
  */
-import { Clock, Effect, FileSystem, Layer, ServiceMap } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -42,21 +42,23 @@ export class BenchmarkOptions extends Schema.Class<BenchmarkOptions>(
 )(
 	{
 		tasksDir: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'tasks'),
-			Schema.withConstructorDefault(() => Option.some('tasks'))
+			Schema.withDecodingDefault(Effect.succeed('tasks')),
+			Schema.withConstructorDefault(Effect.succeed('tasks'))
 		),
 		concurrency: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 4),
-			Schema.withConstructorDefault(() => Option.some(4))
+			Schema.withDecodingDefault(Effect.succeed(4)),
+			Schema.withConstructorDefault(Effect.succeed(4))
 		),
 		baseImageTag: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'effect-autoagent:latest'),
-			Schema.withConstructorDefault(() =>
-				Option.some('effect-autoagent:latest')
+			Schema.withDecodingDefault(
+				Effect.succeed('effect-autoagent:latest')
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed('effect-autoagent:latest')
 			)
 		),
 		outputDir: Schema.OptionFromOptionalKey(Schema.String).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		)
 	},
 	{ description: 'Options for running a benchmark suite.' }
@@ -135,7 +137,7 @@ export namespace BenchmarkRunner {
 		) => Effect.Effect<TaskResult, BenchmarkError>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/BenchmarkRunner'
 	) {}
 

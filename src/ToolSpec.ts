@@ -9,7 +9,7 @@
  *
  * @since 0.3.0
  */
-import * as Option from 'effect/Option';
+import { Effect } from 'effect';
 import * as Schema from 'effect/Schema';
 
 // =============================================================================
@@ -46,14 +46,12 @@ export class ParamSpec extends Schema.Class<ParamSpec>('ParamSpec')(
 		name: Schema.String,
 		description: Schema.String,
 		type: ParamType.pipe(
-			Schema.withDecodingDefault((): ParamType => 'string'),
-			Schema.withConstructorDefault(
-				(): Option.Option<ParamType> => Option.some('string')
-			)
+			Schema.withDecodingDefault(Effect.succeed<ParamType>('string')),
+			Schema.withConstructorDefault(Effect.succeed<ParamType>('string'))
 		),
 		required: Schema.Boolean.pipe(
-			Schema.withDecodingDefault(() => true),
-			Schema.withConstructorDefault(() => Option.some(true))
+			Schema.withDecodingDefault(Effect.succeed(true)),
+			Schema.withConstructorDefault(Effect.succeed(true))
 		)
 	},
 	{
@@ -191,9 +189,11 @@ export class ToolSpec extends Schema.Class<ToolSpec>('ToolSpec')(
 		name: Schema.String,
 		description: Schema.String,
 		parameters: Schema.Array(ParamSpec).pipe(
-			Schema.withDecodingDefault((): ReadonlyArray<ParamSpec> => []),
+			Schema.withDecodingDefault(
+				Effect.succeed<ReadonlyArray<ParamSpec>>([])
+			),
 			Schema.withConstructorDefault(
-				(): Option.Option<ReadonlyArray<ParamSpec>> => Option.some([])
+				Effect.succeed<ReadonlyArray<ParamSpec>>([])
 			)
 		),
 		implementation: ToolImplementation

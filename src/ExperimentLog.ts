@@ -8,7 +8,7 @@
  *
  * @since 0.2.0
  */
-import { Effect, FileSystem, Layer, Result, ServiceMap } from 'effect';
+import { Context, Effect, FileSystem, Layer, Result } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -181,7 +181,7 @@ export namespace ExperimentLog {
 		>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/ExperimentLog'
 	) {}
 

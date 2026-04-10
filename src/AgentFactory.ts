@@ -8,7 +8,7 @@
  *
  * @since 0.4.0
  */
-import { Clock, Effect, Layer, Match, Ref, ServiceMap } from 'effect';
+import { Clock, Context, Effect, Layer, Match, Ref } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -215,7 +215,7 @@ export namespace AgentFactory {
 	 *
 	 * @since 0.4.0
 	 */
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/AgentFactory'
 	) {}
 

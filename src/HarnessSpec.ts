@@ -7,6 +7,7 @@
  *
  * @since 0.2.0
  */
+import { Effect } from 'effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 
@@ -110,7 +111,7 @@ export class EvaluationResult extends Schema.Class<EvaluationResult>(
 		currentPassed: Schema.String,
 		reasoning: Schema.String,
 		commit: Schema.OptionFromOptionalKey(Schema.String).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		)
 	},
 	{

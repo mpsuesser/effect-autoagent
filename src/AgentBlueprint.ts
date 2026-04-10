@@ -8,7 +8,7 @@
  *
  * @since 0.3.0
  */
-import * as Option from 'effect/Option';
+import { Effect } from 'effect';
 import * as Schema from 'effect/Schema';
 
 import {
@@ -49,15 +49,15 @@ export class ThinkingConfig extends Schema.Class<ThinkingConfig>(
 	{
 		type: Schema.Literals(['enabled', 'disabled']).pipe(
 			Schema.withDecodingDefault(
-				(): 'enabled' | 'disabled' => 'disabled'
+				Effect.succeed<'enabled' | 'disabled'>('disabled')
 			),
-			Schema.withConstructorDefault(() =>
-				Option.some<'enabled' | 'disabled'>('disabled')
+			Schema.withConstructorDefault(
+				Effect.succeed<'enabled' | 'disabled'>('disabled')
 			)
 		),
 		budgetTokens: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 0),
-			Schema.withConstructorDefault(() => Option.some(0))
+			Schema.withDecodingDefault(Effect.succeed(0)),
+			Schema.withConstructorDefault(Effect.succeed(0))
 		)
 	},
 	{
@@ -78,19 +78,19 @@ export class ThinkingConfig extends Schema.Class<ThinkingConfig>(
 export class ModelConfig extends Schema.Class<ModelConfig>('ModelConfig')(
 	{
 		provider: ModelProvider.pipe(
-			Schema.withDecodingDefault((): ModelProvider => 'openai'),
-			Schema.withConstructorDefault(() =>
-				Option.some<ModelProvider>('openai')
+			Schema.withDecodingDefault(Effect.succeed<ModelProvider>('openai')),
+			Schema.withConstructorDefault(
+				Effect.succeed<ModelProvider>('openai')
 			)
 		),
 		modelName: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'gpt-5.4'),
-			Schema.withConstructorDefault(() => Option.some('gpt-5.4'))
+			Schema.withDecodingDefault(Effect.succeed('gpt-5.4')),
+			Schema.withConstructorDefault(Effect.succeed('gpt-5.4'))
 		),
 		thinking: ThinkingConfig.pipe(
-			Schema.withDecodingDefault(() => new ThinkingConfig({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new ThinkingConfig({}))
+			Schema.withDecodingDefault(Effect.succeed(new ThinkingConfig({}))),
+			Schema.withConstructorDefault(
+				Effect.succeed(new ThinkingConfig({}))
 			)
 		)
 	},
@@ -111,20 +111,20 @@ export class AgentConstraints extends Schema.Class<AgentConstraints>(
 )(
 	{
 		maxTurns: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 100),
-			Schema.withConstructorDefault(() => Option.some(100))
+			Schema.withDecodingDefault(Effect.succeed(100)),
+			Schema.withConstructorDefault(Effect.succeed(100))
 		),
 		shellTimeoutSec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 120),
-			Schema.withConstructorDefault(() => Option.some(120))
+			Schema.withDecodingDefault(Effect.succeed(120)),
+			Schema.withConstructorDefault(Effect.succeed(120))
 		),
 		containerTimeoutSec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 600),
-			Schema.withConstructorDefault(() => Option.some(600))
+			Schema.withDecodingDefault(Effect.succeed(600)),
+			Schema.withConstructorDefault(Effect.succeed(600))
 		),
 		maxBudgetUsd: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 10),
-			Schema.withConstructorDefault(() => Option.some(10))
+			Schema.withDecodingDefault(Effect.succeed(10)),
+			Schema.withConstructorDefault(Effect.succeed(10))
 		)
 	},
 	{ description: 'Resource constraints for agent execution.' }
@@ -145,55 +145,55 @@ export class AgentBlueprint extends Schema.Class<AgentBlueprint>(
 )(
 	{
 		name: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'autoagent'),
-			Schema.withConstructorDefault(() => Option.some('autoagent'))
+			Schema.withDecodingDefault(Effect.succeed('autoagent')),
+			Schema.withConstructorDefault(Effect.succeed('autoagent'))
 		),
 		version: Schema.String.pipe(
-			Schema.withDecodingDefault(() => '0.1.0'),
-			Schema.withConstructorDefault(() => Option.some('0.1.0'))
+			Schema.withDecodingDefault(Effect.succeed('0.1.0')),
+			Schema.withConstructorDefault(Effect.succeed('0.1.0'))
 		),
 		systemPrompt: Schema.String.pipe(
 			Schema.withDecodingDefault(
-				() => 'You are an agent that executes tasks'
+				Effect.succeed('You are an agent that executes tasks')
 			),
-			Schema.withConstructorDefault(() =>
-				Option.some('You are an agent that executes tasks')
+			Schema.withConstructorDefault(
+				Effect.succeed('You are an agent that executes tasks')
 			)
 		),
 		model: ModelConfig.pipe(
-			Schema.withDecodingDefault(() => new ModelConfig({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new ModelConfig({}))
-			)
+			Schema.withDecodingDefault(Effect.succeed(new ModelConfig({}))),
+			Schema.withConstructorDefault(Effect.succeed(new ModelConfig({})))
 		),
 		tools: Schema.Array(ToolSpec).pipe(
 			Schema.withDecodingDefault(
-				(): ReadonlyArray<ToolSpec> => defaultToolSpecs
+				Effect.succeed<ReadonlyArray<ToolSpec>>(defaultToolSpecs)
 			),
 			Schema.withConstructorDefault(
-				(): Option.Option<ReadonlyArray<ToolSpec>> =>
-					Option.some(defaultToolSpecs)
+				Effect.succeed<ReadonlyArray<ToolSpec>>(defaultToolSpecs)
 			)
 		),
 		orchestration: OrchestrationSpec.pipe(
 			Schema.withDecodingDefault(
-				(): OrchestrationSpecType => defaultOrchestration
+				Effect.succeed<OrchestrationSpecType>(defaultOrchestration)
 			),
 			Schema.withConstructorDefault(
-				(): Option.Option<OrchestrationSpecType> =>
-					Option.some(defaultOrchestration)
+				Effect.succeed<OrchestrationSpecType>(defaultOrchestration)
 			)
 		),
 		constraints: AgentConstraints.pipe(
-			Schema.withDecodingDefault(() => new AgentConstraints({})),
-			Schema.withConstructorDefault(() =>
-				Option.some(new AgentConstraints({}))
+			Schema.withDecodingDefault(
+				Effect.succeed(new AgentConstraints({}))
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed(new AgentConstraints({}))
 			)
 		),
 		description: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'Default agent blueprint'),
-			Schema.withConstructorDefault(() =>
-				Option.some('Default agent blueprint')
+			Schema.withDecodingDefault(
+				Effect.succeed('Default agent blueprint')
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed('Default agent blueprint')
 			)
 		)
 	},

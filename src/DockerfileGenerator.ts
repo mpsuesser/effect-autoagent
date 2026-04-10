@@ -9,7 +9,7 @@
  *
  * @since 0.2.0
  */
-import { pipe } from 'effect';
+import { Effect, pipe } from 'effect';
 import * as Arr from 'effect/Array';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
@@ -28,31 +28,31 @@ export class DockerfileOptions extends Schema.Class<DockerfileOptions>(
 )(
 	{
 		baseImage: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'oven/bun:1.3-debian'),
-			Schema.withConstructorDefault(() =>
-				Option.some('oven/bun:1.3-debian')
-			)
+			Schema.withDecodingDefault(Effect.succeed('oven/bun:1.3-debian')),
+			Schema.withConstructorDefault(Effect.succeed('oven/bun:1.3-debian'))
 		),
 		systemPackages: Schema.Array(Schema.String).pipe(
-			Schema.withDecodingDefault(() => [
-				'ca-certificates',
-				'git',
-				'curl'
-			]),
-			Schema.withConstructorDefault(() =>
-				Option.some(['ca-certificates', 'git', 'curl'])
+			Schema.withDecodingDefault(
+				Effect.succeed(['ca-certificates', 'git', 'curl'])
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed(['ca-certificates', 'git', 'curl'])
 			)
 		),
 		workdir: Schema.String.pipe(
-			Schema.withDecodingDefault(() => '/app'),
-			Schema.withConstructorDefault(() => Option.some('/app'))
+			Schema.withDecodingDefault(Effect.succeed('/app')),
+			Schema.withConstructorDefault(Effect.succeed('/app'))
 		),
 		entrypoint: Schema.OptionFromOptionalKey(Schema.String).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		),
 		extraCommands: Schema.Array(Schema.String).pipe(
-			Schema.withDecodingDefault(() => []),
-			Schema.withConstructorDefault(() => Option.some([]))
+			Schema.withDecodingDefault(
+				Effect.succeed<ReadonlyArray<string>>([])
+			),
+			Schema.withConstructorDefault(
+				Effect.succeed<ReadonlyArray<string>>([])
+			)
 		)
 	},
 	{

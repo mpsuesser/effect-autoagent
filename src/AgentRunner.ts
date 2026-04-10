@@ -7,7 +7,7 @@
  *
  * @since 0.1.0
  */
-import { Effect, Layer, ServiceMap } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import * as Option from 'effect/Option';
 
 import { AgentInfo, type AtifTrajectory } from './Atif.js';
@@ -41,7 +41,7 @@ export namespace AgentConfigService {
 		readonly containerTimeoutSec: number;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/AgentConfig'
 	) {}
 
@@ -114,7 +114,7 @@ export namespace AgentRunner {
 		) => Effect.Effect<AtifTrajectory, AgentRunError>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/AgentRunner'
 	) {}
 

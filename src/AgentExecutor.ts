@@ -7,7 +7,7 @@
  *
  * @since 0.2.0
  */
-import { Clock, Effect, Layer, Ref, ServiceMap } from 'effect';
+import { Clock, Context, Effect, Layer, Ref } from 'effect';
 import * as Option from 'effect/Option';
 import { Chat, LanguageModel, Prompt } from 'effect/unstable/ai';
 
@@ -68,7 +68,7 @@ export namespace AgentExecutor {
 		) => Effect.Effect<AgentRunResult, AgentRunError>;
 	}
 
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/AgentExecutor'
 	) {}
 

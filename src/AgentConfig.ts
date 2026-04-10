@@ -7,6 +7,7 @@
  *
  * @since 0.1.0
  */
+import { Effect } from 'effect';
 import * as Option from 'effect/Option';
 import * as Schema from 'effect/Schema';
 
@@ -64,50 +65,48 @@ export class AgentConfig extends Schema.Class<AgentConfig>('AgentConfig')(
 	{
 		systemPrompt: Schema.String.pipe(
 			Schema.withDecodingDefault(
-				() => 'You are an agent that executes tasks'
+				Effect.succeed('You are an agent that executes tasks')
 			),
-			Schema.withConstructorDefault(() =>
-				Option.some('You are an agent that executes tasks')
+			Schema.withConstructorDefault(
+				Effect.succeed('You are an agent that executes tasks')
 			)
 		),
 		model: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'gpt-5.4'),
-			Schema.withConstructorDefault(() => Option.some('gpt-5.4'))
+			Schema.withDecodingDefault(Effect.succeed('gpt-5.4')),
+			Schema.withConstructorDefault(Effect.succeed('gpt-5.4'))
 		),
 		maxTurns: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 30),
-			Schema.withConstructorDefault(() => Option.some(30))
+			Schema.withDecodingDefault(Effect.succeed(30)),
+			Schema.withConstructorDefault(Effect.succeed(30))
 		),
 		name: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'autoagent'),
-			Schema.withConstructorDefault(() => Option.some('autoagent'))
+			Schema.withDecodingDefault(Effect.succeed('autoagent')),
+			Schema.withConstructorDefault(Effect.succeed('autoagent'))
 		),
 		version: Schema.String.pipe(
-			Schema.withDecodingDefault(() => '0.1.0'),
-			Schema.withConstructorDefault(() => Option.some('0.1.0'))
+			Schema.withDecodingDefault(Effect.succeed('0.1.0')),
+			Schema.withConstructorDefault(Effect.succeed('0.1.0'))
 		),
 		thinking: Schema.OptionFromOptionalKey(ThinkingConfig).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		),
 		toolPreset: Schema.OptionFromOptionalKey(ToolPreset).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		),
 		shellTimeoutSec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 120),
-			Schema.withConstructorDefault(() => Option.some(120))
+			Schema.withDecodingDefault(Effect.succeed(120)),
+			Schema.withConstructorDefault(Effect.succeed(120))
 		),
 		containerTimeoutSec: Schema.Number.pipe(
-			Schema.withDecodingDefault(() => 600),
-			Schema.withConstructorDefault(() => Option.some(600))
+			Schema.withDecodingDefault(Effect.succeed(600)),
+			Schema.withConstructorDefault(Effect.succeed(600))
 		),
 		maxBudgetUsd: Schema.OptionFromOptionalKey(Schema.Number).pipe(
-			Schema.withConstructorDefault(() => Option.some(Option.none()))
+			Schema.withConstructorDefault(Effect.succeed(Option.none()))
 		),
 		permissionMode: Schema.String.pipe(
-			Schema.withDecodingDefault(() => 'bypassPermissions'),
-			Schema.withConstructorDefault(() =>
-				Option.some('bypassPermissions')
-			)
+			Schema.withDecodingDefault(Effect.succeed('bypassPermissions')),
+			Schema.withConstructorDefault(Effect.succeed('bypassPermissions'))
 		)
 	},
 	{

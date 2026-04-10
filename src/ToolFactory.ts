@@ -8,7 +8,7 @@
  *
  * @since 0.3.0
  */
-import { Effect, Layer, Result, ServiceMap } from 'effect';
+import { Context, Effect, Layer, Result } from 'effect';
 import * as Arr from 'effect/Array';
 import * as P from 'effect/Predicate';
 import * as R from 'effect/Record';
@@ -253,7 +253,7 @@ export namespace ToolFactory {
 	 *
 	 * @since 0.3.0
 	 */
-	export class Service extends ServiceMap.Service<Service, Interface>()(
+	export class Service extends Context.Service<Service, Interface>()(
 		'@autoagent/ToolFactory'
 	) {}
 
